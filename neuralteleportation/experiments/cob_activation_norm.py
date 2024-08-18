@@ -22,6 +22,9 @@ def argument_parser():
     parser.add_argument("--lr", type=float, default=1e-3, help='Learning rate for cob optimizer')
     parser.add_argument("--cob_range", type=float, default=1,
                         help='Range for the teleportation to create target weights')
+    # add argument for center
+    parser.add_argument("--center", type=float, default=1,
+                        help='Center for the teleportation to create target weights')
 
     return parser.parse_args()
 
@@ -71,11 +74,12 @@ if __name__ == '__main__':
     # )
 
     model = nn.Sequential(
-         nn.Flatten(),
+        nn.Flatten(),
         nn.Linear(784, 128),
         nn.ReLU(),
-        nn.Linear(128, 10),
-        nn.ReLU()
+        nn.Linear(128, 64),
+        nn.ReLU(),
+        nn.Linear(64, 10)
     )
 
     # check model already trained
@@ -101,12 +105,21 @@ if __name__ == '__main__':
     # Test the model
     test_dataset = datasets.MNIST('./data', train=False, download=True, transform=transforms.ToTensor())
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
-    input_data = next(iter(test_loader))[0]
+    # input_data = next(iter(test_loader))[0]
+    # get random data from the test loader
+    random_index = np.random.randint(0, len(test_dataset))
+    input_data = test_dataset[random_index][0].unsqueeze(0)
     original_pred = model(input_data)
+
+    # save the input data
+    np.save("input_data.npy", input_data.numpy())
     
     for layer, stats in activation_stats.items():
         print(f'Layer {layer}: {stats}')
     
+    # copy activations
+    original_activations = {layer: stats for layer, stats in activation_stats.items()}
+    orginial_loss = sum([stats['norm'] for stats in activation_stats.values()])
     original_pred = original_pred.detach().cpu().numpy()
 
     model = swap_model_modules_for_COB_modules(model)
@@ -120,13 +133,14 @@ if __name__ == '__main__':
     initial_weights = model.get_weights().detach()
 
     # Generate a new random cob
-    cob = model.generate_random_cob(cob_range=args.cob_range, requires_grad=True)
+    cob = model.generate_random_cob(cob_range=args.cob_range, requires_grad=True,center=args.center)
     # new_cob = cob.clone().detach().requires_grad_(True)
 
     history = []
     cob_error_history = []
-
-    args.steps = 100
+    min_loss = sum([stats['norm'] for stats in activation_stats.values()])
+    history.append(min_loss.item())
+    best_cob = cob.clone().detach()
 
     for e in range(args.steps):
         print("\n === Step: ", e , " === ")
@@ -145,6 +159,9 @@ if __name__ == '__main__':
         # define loss as the value of the l1 norm of the activations
         loss = sum([stats['norm'] for stats in activation_stats.values()])
         print("Loss: ", loss.item(), "\t l1 norm of activations: ", [stats['norm'].item() for stats in activation_stats.values()])
+        # print max and min of the activations
+        print("Max of activations: ", [stats['max'] for stats in activation_stats.values()])
+        print("Min of activations: ", [stats['min'] for stats in activation_stats.values()])
 
         # Backwards pass
         grad = torch.autograd.grad(loss, cob, create_graph=True)
@@ -154,22 +171,77 @@ if __name__ == '__main__':
 
         # grad[0] = grad[0] + 0.1 * grad[0].mean() * torch.randn_like(grad[0])
         # new_cob = cob.clone().detach() - args.lr * grad[0] / grad[0].norm()
-        cob = cob - args.lr * grad[0] / grad[0].norm()
+        cob = cob - args.lr * grad[0] / (grad[0].norm() + 1e-8)
+        # add a small noise to the cob
+        cob = cob + 0.05 * cob.mean() * torch.randn_like(cob)
+        # cob = cob - args.lr * grad[0]
         # set all new_cob element to be positive
         # new_cob = torch.abs(new_cob)
         cob = torch.abs(cob)
         cob.grad = None
+        # reset the teleportation
+        if e % 100 == 0:
+            cob = model.generate_random_cob(cob_range=args.cob_range, requires_grad=True,center=args.center)
         
         history.append(loss.item())
-        
-        # cob_error_history.append((cob - target_cob).square().mean().item())
-        # if e % 100 == 0:
-            # print("Step: {}, loss: {}, cob error: {}".format(e, loss.item(), (cob - target_cob).abs().mean().item()))
+
+        if loss < min_loss:
+            print("----------- New best loss: ", loss.item())
+            min_loss = loss
+            best_cob = cob.clone().detach()
+            # save the model weights
+            torch.save(model.state_dict(), f'model_weights_cob_activation_norm_teleported.pth')
+
+
+    print(" ====== Best COB ====== ")
+    print(min_loss)
+    # load the best model to check the activations
+    model = nn.Sequential(
+        nn.Flatten(),
+        nn.Linear(784, 128),
+        nn.ReLU(),
+        nn.Linear(128, 64),
+        nn.ReLU(),
+        nn.Linear(64, 10)
+    )
+    new_state_dict = {}
+    state_dict = torch.load('model_weights_cob_activation_norm_teleported.pth')
+    for key, value in state_dict.items():
+        new_key = key[8:]
+        new_state_dict[new_key] = value
+    model.load_state_dict(new_state_dict)
+    # Register hooks to the layers before all activation functions
+    activation_stats = {}
+    for i, layer in enumerate(model):
+        if isinstance(layer, nn.ReLU):
+            model[i].register_forward_hook(activation_hook(f'relu_{i}'))
+    model.eval()
+    pred = model(input_data)
+    for layer, stats in activation_stats.items():
+        print(f'Layer {layer}: {stats}')
+
+    # original model
+    print(" ====== Original COB ====== ")
+    print(orginial_loss)
+    for layer, stats in original_activations.items():
+        print(f'Layer {layer}: {stats}')
+
 
     plt.figure()
-    # plt.plot(history)
-    # concat history[0] and history[10:]
-    # plt.plot([history[0]] + history[10:])
-    plt.plot(history)
+    history = np.array(history)
+    history = history[~np.isnan(history)]
+    # set values bigger than twice the mean to be the twice of the mean
+    mean_history = history.mean()
+    history[history>2*mean_history] = 2*mean_history
+    # plot the history with red color for values equal to twice the mean and blue color for other values
+    plt.plot(history, color='blue', label='History')
+    for i, value in enumerate(history):
+        if value == 2 * mean_history:
+            # set size point to be 10
+            plt.plot(i, value, 'ro')  # Red color for points meeting the condition
+        else:
+            plt.plot(i, value, 'bo')  # Blue color for other points
+
+
     plt.title("Loss")
     plt.show()
