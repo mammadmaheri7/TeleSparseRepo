@@ -13,7 +13,56 @@ import numpy as np
 
 from neuralteleportation.models.model_zoo.mlpcob import MLPCOB
 from neuralteleportation.neuralteleportationmodel import NeuralTeleportationModel
+from neuralteleportation.layers.neuralteleportation import FlattenCOB
+from neuralteleportation.layers.neuron import LinearCOB
+from neuralteleportation.layers.activation import ReLUCOB
 
+class LinearNet(nn.Module):
+    def __init__(self):
+        super(LinearNet, self).__init__()
+        self.flatten = FlattenCOB()
+        self.fc1 = LinearCOB(784, 128)
+        self.relu1 = ReLUCOB()
+        self.fc2 = LinearCOB(128, 64)
+        self.relu2 = ReLUCOB()
+        self.fc3 = LinearCOB(64, 10)
+
+    def forward(self, x):
+        x1 = self.flatten(x)
+        x2 = self.fc1(x1)
+        x3 = self.relu1(x2)
+        x4 = self.fc2(x3)
+        x5 = self.relu2(x4)
+        x6 = self.fc3(x5)
+        return x6
+
+def load_model_weights(model, path, revere=False):
+    # load model weights
+    name_dict = {
+        '1': 'fc1',
+        '3': 'fc2',
+        '5': 'fc3'
+    }
+
+    state_dict = torch.load(path)
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        # remove the 'network.' prefix if it exists
+        if key.startswith('network.'):
+            key = key.replace('network.', '')
+        # get the first part of the key (before the dot)
+        key_first = key.split('.')[0]
+        if revere:
+            # get the key corrosponding to the key_first (value is the key_first)
+            new_key = [k for k, v in name_dict.items() if v == key_first]             # len should be 1
+            assert len(new_key) == 1
+            new_key = new_key[0]
+            new_key = new_key + '.' + '.'.join(key.split('.')[1:])
+        else:
+            new_key = name_dict[key_first] + '.' + '.'.join(key.split('.')[1:])
+        new_state_dict[new_key] = value
+    model.load_state_dict(new_state_dict)
+    return model
 
 def argument_parser():
     parser = argparse.ArgumentParser()
@@ -82,6 +131,7 @@ if __name__ == '__main__':
         nn.Linear(64, 10)
     )
 
+    
     # check model already trained
     if os.path.exists('model_weights_cob_activation_norm.pth'):
         model.load_state_dict(torch.load('model_weights_cob_activation_norm.pth'))
@@ -122,12 +172,13 @@ if __name__ == '__main__':
     orginial_loss = sum([stats['norm'] for stats in activation_stats.values()])
     original_pred = original_pred.detach().cpu().numpy()
 
-    model = swap_model_modules_for_COB_modules(model)
+    # model = swap_model_modules_for_COB_modules(model)
+    model = LinearNet()
     model = NeuralTeleportationModel(model, input_shape=(1, 1, 28, 28))
     model.training = True
     
-    # load model weights
-    model.network.load_state_dict(torch.load('model_weights_cob_activation_norm.pth'))
+    # model.network.load_state_dict(torch.load('model_weights_cob_activation_norm.pth'))
+    load_model_weights(model.network, 'model_weights_cob_activation_norm.pth')
 
     # Get the initial set of weights and teleport.
     initial_weights = model.get_weights().detach()
@@ -151,9 +202,10 @@ if __name__ == '__main__':
         model = model.teleport(cob,reset_teleportation=True)
 
         activation_stats = {}
-        for i, layer in enumerate(model.network):
-            if isinstance(layer, nn.ReLU):
-                model.network[i].register_forward_hook(activation_hook(f'relu_{i}'))
+        for i, layer in enumerate(model.network.children()):
+            if isinstance(layer, nn.ReLU) or isinstance(layer, ReLUCOB):
+                # model.network[i].register_forward_hook(activation_hook(f'relu_{i}'))
+                layer.register_forward_hook(activation_hook(f'relu_{i}'))
         pred = model(input_data)
 
         # define loss as the value of the l1 norm of the activations
@@ -204,12 +256,8 @@ if __name__ == '__main__':
         nn.ReLU(),
         nn.Linear(64, 10)
     )
-    new_state_dict = {}
-    state_dict = torch.load('model_weights_cob_activation_norm_teleported.pth')
-    for key, value in state_dict.items():
-        new_key = key[8:]
-        new_state_dict[new_key] = value
-    model.load_state_dict(new_state_dict)
+    # model.load_state_dict(torch.load('model_weights_cob_activation_norm_teleported.pth'))
+    load_model_weights(model, 'model_weights_cob_activation_norm_teleported.pth',revere=True)
     # Register hooks to the layers before all activation functions
     activation_stats = {}
     for i, layer in enumerate(model):
@@ -219,6 +267,7 @@ if __name__ == '__main__':
     pred = model(input_data)
     for layer, stats in activation_stats.items():
         print(f'Layer {layer}: {stats}')
+    print("diff pred mean: ", np.absolute(original_pred - pred.detach().cpu().numpy()).mean())
 
     # original model
     print(" ====== Original COB ====== ")
