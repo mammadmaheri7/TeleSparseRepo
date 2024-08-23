@@ -276,7 +276,8 @@ if __name__ == '__main__':
         # )
         # loss is sum of the norm of the activations
         # loss = sum(stats['norm'] for stats in activation_stats.values())
-        loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
+        # loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
+        loss = pred.norm()
         # loss is the sum of the norm/cob of the activations (norm and cob are array with same size)
         # loss = sum(stats['weighted_norm'] for stats in activation_stats.values())
         print("Loss: ", loss.item(), "\t l1 norm of activations: ", [stats['norm'].item() for stats in activation_stats.values()])
