@@ -15,7 +15,8 @@ class ActivationLayerMixin(COBForwardMixin, NeuralTeleportationLayerMixin):
         pass
 
     def _forward(self, input: torch.Tensor) -> torch.Tensor:
-        return self.cob * self.base_layer().forward(self, input / self.cob)
+        # return self.cob * self.base_layer().forward(self, input / self.cob)
+        return self.base_layer().forward(self, input)
 
 
 class ReLUCOB(ActivationLayerMixin, nn.ReLU):
@@ -39,4 +40,7 @@ class LeakyReLUCOB(ActivationLayerMixin, nn.LeakyReLU):
 
 
 class ELUCOB(ActivationLayerMixin, nn.ELU):
+    reshape_cob = True
+
+class GELUCOB(ActivationLayerMixin, nn.GELU):
     reshape_cob = True
