@@ -138,3 +138,17 @@ neuralteleportation/experiments/micro_teleportation/images/**
 
 # Local config
 *.comet.config
+
+*.pt
+
+mmd/*
+*.pth
+*.onnx
+*.pkl
+teleport_pip_env
+*.json
+*.npy
+
+neuralteleportation/experiments/model_weights_cob_activation_norm_teleported.onnx
+neuralteleportation/experiments/model_weights_cob_activation_norm.onnx
+neuralteleportation/experiments/input_data.npy

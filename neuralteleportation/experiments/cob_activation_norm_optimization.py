@@ -16,17 +16,20 @@ from neuralteleportation.neuralteleportationmodel import NeuralTeleportationMode
 from neuralteleportation.layers.neuralteleportation import COBForwardMixin, FlattenCOB
 from neuralteleportation.layers.neuron import LinearCOB
 from neuralteleportation.layers.activation import ReLUCOB, SigmoidCOB, GELUCOB, LeakyReLUCOB
+from neuralteleportation.layers.neuron import LayerNormCOB
 
 class LinearNet(nn.Module):
     def __init__(self):
         super(LinearNet, self).__init__()
         self.flatten = FlattenCOB()
+        self.norm = LayerNormCOB(784)
         self.fc1 = LinearCOB(784, 128)
         self.relu0 = GELUCOB()
         self.fc2 = LinearCOB(128, 10)
 
     def forward(self, x):
         x1 = self.flatten(x)
+        x1 = self.norm(x1)
         x2 = self.fc1(x1)
         x3 = self.relu0(x2)
         x4 = self.fc2(x3)
@@ -36,8 +39,9 @@ class LinearNet(nn.Module):
 def load_model_weights(model, path, revere=False):
     # load model weights
     name_dict = {
-        '1': 'fc1',
-        '3': 'fc2',
+        '1': 'norm',
+        '2': 'fc1',
+        '4': 'fc2',
     }
 
     state_dict = torch.load(path)
@@ -141,6 +145,7 @@ if __name__ == '__main__':
     # Load or train your model
     model = nn.Sequential(
         nn.Flatten(),
+        nn.LayerNorm(784),
         nn.Linear(784, 128),
         nn.GELU(),
         nn.Linear(128, 10)
@@ -183,6 +188,7 @@ if __name__ == '__main__':
     model = LinearNet()
     model = NeuralTeleportationModel(model, input_shape=(1, 1, 28, 28))
     load_model_weights(model.network, 'model_weights_cob_activation_norm.pth')
+    # model.network.load_state_dict(torch.load('model_weights_cob_activation_norm.pth'))
 
     # Get initial weights
     initial_weights = model.get_weights().detach()
