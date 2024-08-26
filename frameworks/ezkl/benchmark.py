@@ -1,3 +1,4 @@
+import re
 import os, subprocess, sys
 import torch, struct, os, psutil, subprocess, time, threading
 import torch.nn as nn
@@ -35,6 +36,12 @@ arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
 
 def dnn_datasets():
     (_, _), (test_images, test_labels) = tf.keras.datasets.mnist.load_data()
+    # suffle the data
+    np.random.seed(7)
+    idx = np.random.permutation(len(test_images))
+    test_images = test_images[idx]
+    test_labels = test_labels[idx]
+
     # Convert to PyTorch tensors
     test_images_pt = torch.tensor(test_images).float()
     test_labels_pt = torch.tensor(test_labels)
@@ -112,6 +119,11 @@ def monitor_memory(pid, freq = 0.01):
 
 def execute_and_monitor(command, show = False):
     start_time = time.time()
+    if command[0] == 'python':
+        command[0] = 'python3'  # Update to python3 if needed
+        command.insert(1, '-u')
+
+    print(f"Running command: {' '.join(command)}")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(monitor_memory, process.pid)
@@ -126,17 +138,23 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
     data_path = os.path.join(output_folder, 'input.json')
     model_path = os.path.join(output_folder, 'network.onnx')
 
-    sampled_data = test_images[0]
+    sampled_data = test_images[0].unsqueeze(0).detach().cpu()
+    # sampled_data = torch.rand(1, 784)
     
     with torch.no_grad():
         torch.onnx.export(model, 
                     sampled_data, 
                     model_path, 
                     export_params=True, 
-                    opset_version=10, 
+                    # opset_version=10, 
+                    opset_version=12,
                     do_constant_folding=True, 
-                    input_names=['input_0'], 
-                    output_names=['output'])
+                    input_names=['input'], 
+                    output_names=['output'],
+                    dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                    'output' : {0 : 'batch_size'}})
+    
+    # torch.onnx.export(model, x, model_path, export_params=True, opset_version=12, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
     loss = 0
     mem_usage = []
     time_cost = []
@@ -158,17 +176,27 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
         # usage = 1
         stdout, _, usage = execute_and_monitor(command)
 
+        # retrive the proof time from the stdout
+        match = re.search(r'proof took (\d+\.\d+)', stdout)
+        if match:
+            proof_took = match.group(1)
+            print(f"Proof took: {proof_took} seconds")
+        else:
+            print("Proof took value not found")
+
+        # retrive the prediction from the stdout
         try:
             pred = int(stdout[-2])
         except ValueError:
             print(f"Failed to convert {stdout[-2]} to int. Full output: {stdout}")
             pred  = -1
-        #print ('pred:',pred)
+
         if pred != predictions[i]:
             loss += 1
             print ("Loss happens on index", i, "predicted_class", pred)
         mem_usage.append(usage)
-        time_cost.append(time.time() - start_time)
+        # time_cost.append(time.time() - start_time)
+        time_cost.append(float(proof_took))
 
     print ("Total time:", time.time() - benchmark_start_time)
 
@@ -202,6 +230,7 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
     return
 
 def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes=""):
+    print("Benchmarking CNN model called")
     data_path = os.path.join(output_folder, 'input.json')
     model_path = os.path.join(output_folder, 'network.onnx')
 
@@ -210,25 +239,126 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
     time_cost = []
     benchmark_start_time = time.time()
 
+    # setting 50 percent of model weights to zero
+    # print ("====== Setting 90 percent of model weights to zero ======")
+    # # set 90 percent of trainable param model to zero
+    # for param in model.parameters():
+    #     param.data = param.data * (torch.rand(param.size()) > 0.1).float()
+
+    sampled_data = test_images[0].unsqueeze(0).detach().cpu()
+    # print("Sampled data shape:", sampled_data.shape)
+    # print summary of the model
+
+    model.eval()
+    try:
+        with torch.no_grad():
+                torch.onnx.export(model, 
+                            sampled_data, 
+                            model_path, 
+                            export_params=True, 
+                            # opset_version=10, 
+                            opset_version=12,
+                            do_constant_folding=True, 
+                            input_names=['input'], 
+                            output_names=['output'],
+                            dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                            'output' : {0 : 'batch_size'}})
+                import onnx
+                on = onnx.load(model_path)
+                for tensor in on.graph.input:
+                    for dim_proto in tensor.type.tensor_type.shape.dim:
+                        if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
+                            dim_proto.Clear()
+                            dim_proto.dim_value = 1   # fixed batch size
+                for tensor in on.graph.output:
+                    for dim_proto in tensor.type.tensor_type.shape.dim:
+                        if dim_proto.HasField("dim_param"):
+                            dim_proto.Clear()
+                            dim_proto.dim_value = 1   # fixed batch size
+                onnx.save(on, model_path)
+
+                on = onnx.load(model_path)
+                on = onnx.shape_inference.infer_shapes(on)
+                onnx.save(on, model_path)
+
+    except Exception as e:
+        print(f"Error: {e}")
+        # throw error
+        exit(1)
+
     for i in range(len(test_images)):
         print ("Process for image", i)
         start_time = time.time()
-        img = test_images[i:i+1]
+        img = test_images[i:i+1].detach().cpu()
+        # with torch.no_grad():
+        #     try:
+        #         torch.onnx.export(model, 
+        #                     img, 
+        #                     model_path, 
+        #                     export_params=True, 
+        #                     opset_version=12, 
+        #                     do_constant_folding=True, 
+        #                     input_names=['input_0'], 
+        #                     output_names=['output'])
+        #     except Exception as e:
+        #         print(f"Error: {e}")
+        #         # throw error
+        #         exit(1)
+
         with torch.no_grad():
-            torch.onnx.export(model, 
-                        img, 
-                        model_path, 
-                        export_params=True, 
-                        opset_version=10, 
-                        do_constant_folding=True, 
-                        input_names=['input_0'], 
-                        output_names=['output'])
-    
+                torch.onnx.export(model, 
+                            img, 
+                            model_path, 
+                            export_params=True, 
+                            # opset_version=10, 
+                            opset_version=12,
+                            do_constant_folding=True, 
+                            input_names=['input'], 
+                            output_names=['output'],
+                            dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                            'output' : {0 : 'batch_size'}})
+                
+                import onnx
+                on = onnx.load(model_path)
+                for tensor in on.graph.input:
+                    for dim_proto in tensor.type.tensor_type.shape.dim:
+                        if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
+                            dim_proto.Clear()
+                            dim_proto.dim_value = 1   # fixed batch size
+                for tensor in on.graph.output:
+                    for dim_proto in tensor.type.tensor_type.shape.dim:
+                        if dim_proto.HasField("dim_param"):
+                            dim_proto.Clear()
+                            dim_proto.dim_value = 1   # fixed batch size
+                onnx.save(on, model_path)
+
+                on = onnx.load(model_path)
+                on = onnx.shape_inference.infer_shapes(on)
+                onnx.save(on, model_path)
+
+        x = (img.cpu().detach().numpy().reshape([-1])).tolist()
+        data = dict(input_data = [x])
+        # Serialize data into file:
+        json.dump(data, open(data_path, 'w'))
+
         command = ["python", "gen_proof.py", "--model", model_path, "--data", data_path, "--output", output_folder, "--mode", mode]
         # subprocess.run(command)
         # stdout = "1234"
         # usage = 1
-        stdout, _, usage = execute_and_monitor(command)
+        
+        stdout, error, usage = execute_and_monitor(command)
+
+        # print("===== Error:", error)
+        # print("===== Stdout:", stdout)
+
+        # retrive the proof time from the stdout
+        match = re.search(r'proof took (\d+\.\d+)', stdout)
+        if match:
+            proof_took = match.group(1)
+            print(f"Proof took: {proof_took} seconds")
+        else:
+            print("Proof took value not found")
+
         
         try:
             pred = int(stdout[-2])
@@ -238,9 +368,10 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
 
         if pred != predictions[i]:
             loss += 1
-            print ("Loss happens on index", i, "predicted_class", pred)
+            print ("Loss happens on index", i, "predicted_class", pred, "\t True class", predictions[i])
         mem_usage.append(usage)
-        time_cost.append(time.time() - start_time)
+
+        time_cost.append(float(proof_took))
 
     print ("Total time:", time.time() - benchmark_start_time)
 
@@ -510,6 +641,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--accuracy', action='store_true', help='Flag to indicate if use accuracy mode which may sacrifice efficiency')
 
+    # add argument sparsity with default value 0.0
+    parser.add_argument('--sparsity', type=float, default=0.0, help='Sparsity of the model')
+
     args = parser.parse_args()
 
     if args.list:
@@ -533,7 +667,8 @@ if __name__ == "__main__":
     else:
         dnn = False
 
-    if args.accuracy and dnn:
+    # if args.accuracy and dnn:
+    if args.accuracy:
         mode = "accuracy"
     else:
         mode = "resources"
@@ -556,6 +691,12 @@ if __name__ == "__main__":
 
         model = gen_model_dnn(layers, state_dict)
 
+        if args.sparsity > 0.0:
+            # set args.sparsity percent of trainable param model to zero
+            for param in model.parameters():
+                param.data = param.data * (torch.rand(param.size()) > args.sparsity).float()
+            notes += f' | sparsity={args.sparsity}'
+
         predicted_labels, tests = prepare(model, layers)
         benchmark_dnn(tests[start:start+args.size], predicted_labels[start:start+args.size], model, args.model, 
                     mode=mode, save=args.save, notes=notes)
@@ -565,8 +706,14 @@ if __name__ == "__main__":
         state_dict = torch.load(model_path + arch_folder+ args.model + ".pth")
 
         model = gen_model_cnn(layers, state_dict)
+
+        if args.sparsity > 0.0:
+            # set args.sparsity percent of trainable param model to zero
+            for param in model.parameters():
+                param.data = param.data * (torch.rand(param.size()) > args.sparsity).float()
+            notes += f' | sparsity={args.sparsity}'
         
         predicted_labels, tests = prepare_cnn(model, layers)
 
         benchmark_cnn(tests[:args.size], predicted_labels[:args.size], model, args.model, 
-                save=args.save, notes=notes)
+                mode=mode,save=args.save, notes=notes)

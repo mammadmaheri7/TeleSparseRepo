@@ -131,6 +131,11 @@ def dnn_datasets():
     mnist = tf.keras.datasets.mnist
     (train_images, train_labels), (test_images, test_labels) = mnist.load_data()
 
+    np.random.seed(7)
+    idx = np.random.permutation(len(test_images))
+    test_images = test_images[idx]
+    test_labels = test_labels[idx]
+
     # Normalize and flatten the images
     train_images_tf = train_images.reshape((-1, 28*28)) / 255.0
     test_images_tf = test_images.reshape((-1, 28*28)) / 255.0
@@ -487,7 +492,15 @@ def benchmark_dnn(test_images, predictions, weights, biases, layers, model_name,
                     ['snarkjs', 'groth16', 'prove', zkey, wit_file, tmp_folder+'proof.json', tmp_folder+'public.json']]
 
         for command in commands:
+            # compute the time of the prove command (second command)
+            if command == commands[1]:
+                start_time = time.time()
+
             stdout, _, usage = execute_and_monitor(command)
+            
+            if command == commands[1]:
+                time_prove = time.time() - start_time
+
             # print ('command:', command)
             # print (stdout)
 
@@ -510,7 +523,8 @@ def benchmark_dnn(test_images, predictions, weights, biases, layers, model_name,
             print ("Loss happens on index", i)
 
         mem_usage.append(cost)
-        time_cost.append(time.time() - start_time)
+        # time_cost.append(time.time() - start_time)
+        time_cost.append(time_prove)
     
     print ("Total time:", time.time() - benchmark_start_time)
 
@@ -568,7 +582,14 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
                     ['snarkjs', 'groth16', 'prove',zkey, wit_file, tmp_folder+'proof.json', tmp_folder+'public.json']]
 
         for command in commands:
+            # compute the time of the prove command (second command)
+            if command == commands[1]:
+                start_time = time.time()
+
             stdout, _, usage = execute_and_monitor(command)
+            
+            if command == commands[1]:
+                time_prove = time.time() - start_time
             # print ('command:', command)
             # print (stdout)
             if "ERROR" in stdout:
@@ -590,7 +611,8 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
             print ("Loss happens on index", i)
 
         mem_usage.append(cost)
-        time_cost.append(time.time() - start_time)
+        # time_cost.append(time.time() - start_time)
+        time_cost.append(time_prove)
 
     print ("Total time:", time.time() - benchmark_start_time)
     layers = model_name.split("_")

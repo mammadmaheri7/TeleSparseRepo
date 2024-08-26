@@ -176,6 +176,16 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         stdout, _, usage = execute_and_monitor(command_2)
         cost += usage
 
+        # Extract the proving time from the output
+        proving_time_pattern = r"Proving time: ([\d\.]+)s"
+        # Search for the pattern in the text
+        match = re.search(proving_time_pattern, stdout)
+        if match:
+            proving_time = match.group(1)
+            print(f"Proving time: {proving_time} seconds")
+        else:
+            print("Proving time not found.")  
+
         # Extract x values using regex
         x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (-?\d+) \(', stdout)][-10:]
         #x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (\d+)', stdout)][-10:]
@@ -191,7 +201,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             print ("Loss happens on index", i, "predicted_class", max_index)
         
         mem_usage.append(cost)
-        time_cost.append(time.time() - start_time)
+        # time_cost.append(time.time() - start_time)
+        time_cost.append(float(proving_time))
 
     print ("Total time:", time.time() - benchmark_start_time)
     layers = model_name.split("_")
@@ -290,6 +301,9 @@ if __name__ == "__main__":
     parser.add_argument('--save', action='store_true', help='Flag to indicate if save results')
     parser.add_argument('--arm', action='store_true', help='Flag to indicate if use Arm64 Arch')
 
+    # add argument for sparsity
+    parser.add_argument('--sparsity', type=float, help='Sparsity of the model', default=0.0)
+
 
     args = parser.parse_args()
 
@@ -322,7 +336,8 @@ if __name__ == "__main__":
         dnn = False
 
     if args.arm:
-        circuit_folder = "./bin/m1_mac/arm_64/"
+        # circuit_folder = "./bin/m1_mac/arm_64/"
+        circuit_folder = "./bin/m1_mac/"
     else:
         circuit_folder = "./bin/"
 
@@ -346,6 +361,13 @@ if __name__ == "__main__":
     else:
         arch_folder = arch_folders[args.model]
         model_in_path = model_path + arch_folder + args.model +'.tflite'
+
+        if args.sparsity>0:
+            # save a model with sparsity
+            model_in_path = model_path+arch_folder+args.model + '_sparsity_'+str(args.sparsity) + '.tflite'
+            print(f" === Using sparsity model: {model_in_path}")
+            # append sparsity to notes
+            notes += f' with sparsity {args.sparsity}'
 
         interpreter = tf.lite.Interpreter(model_path=model_in_path)
         interpreter.allocate_tensors()
