@@ -403,10 +403,8 @@ class BatchNorm1dCOB(BatchNormMixin, nn.BatchNorm1d):
 
 class LayerNormCOB(BatchNormMixin, nn.LayerNorm):
     reshape_cob = True
-    # num_features: int = 768
     num_features: int
-    # cob_field = 'next_cob'
-
+   
     # def _forward(self, input: torch.Tensor) -> torch.Tensor:
     #     return self.base_layer().forward(self, input / self.next_cob)
 
