@@ -1,13 +1,26 @@
 import onnx
 import onnxruntime as ort
 import numpy as np
+import argparse
 
+# argument the input_data_path and model_1_path and model_2_path
+def argument_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=str, default=None, help='Number of optimization steps')
+    parser.add_argument("--model1", type=str, default=None, help='Seed for torch random')
+    parser.add_argument("--model2", type=str, default=None, help='Learning rate for cob optimizer')
+    return parser.parse_args()
+
+args = argument_parser()
 # Load the input data
-input_data = np.load('input_data.npy')
+# input_data = np.load('input_data.npy')
+input_data = np.load(args.input)
 
 # Load the ONNX models
-model_1_path = 'model_weights_cob_activation_norm_teleported.onnx'
-model_2_path = 'model_weights_cob_activation_norm.onnx'
+# model_1_path = 'model_weights_cob_activation_norm_teleported.onnx'
+model_1_path = args.model1
+# model_2_path = 'model_weights_cob_activation_norm.onnx'
+model_2_path = args.model2
 
 # Verify the models (optional, checks for correctness of the model structure)
 onnx_model_1 = onnx.load(model_1_path)
