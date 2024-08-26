@@ -24,10 +24,10 @@ class COBForwardMixin(object):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if getattr(self, self.cob_field) is None:
-            setattr(self, self.cob_field, torch.ones(input.shape[1]))
-
+            setattr(self, self.cob_field, torch.ones(input.shape[-1]))
         if self.reshape_cob:
-            cob_shape = (input.shape[1],) + tuple([1 for _ in range(input.dim() - 2)])
+            # cob_shape = (input.shape[1],) + tuple([1 for _ in range(input.dim() - 2)])
+            cob_shape = (input.shape[-1],) + (1,) * (input.dim() - 2)
             # cob_view = getattr(self, self.cob_field).view(cob_shape).float().type_as(input).detach()
             cob_view = getattr(self, self.cob_field).view(cob_shape).float().type_as(input)
             setattr(self, self.cob_field, cob_view)
