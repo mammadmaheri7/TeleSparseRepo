@@ -53,19 +53,19 @@ max_difference = np.max(difference)
 mean_difference = np.mean(difference)
 
 # Display detailed comparison
-print("Output comparison (element-wise):")
-print(comparison)
+# print("Output comparison (element-wise):")
+# print(comparison)
 
 print("\nDetailed Differences:")
 print("Max difference:", max_difference)
 print("Mean difference:", mean_difference)
 
-print("\nIf differences exist, their values:")
-if not np.all(comparison):
-    print(difference[~comparison])
+# print("\nIf differences exist, their values:")
+# if not np.all(comparison):
+#     print(difference[~comparison])
 
-print("\nOutput 1:")
-print(output_1)
+# print("\nOutput 1:")
+# print(output_1)
 
-print("\nOutput 2:")
-print(output_2)
+# print("\nOutput 2:")
+# print(output_2)
