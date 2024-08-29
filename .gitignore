@@ -149,7 +149,6 @@ teleport_pip_env
 *.json
 *.npy
 *.compiled
-*.txt
 *.csv
 *.DS_Store
 neuralteleportation/experiments/.DS_Store
@@ -158,3 +157,4 @@ neuralteleportation/experiments/.DS_Store
 neuralteleportation/experiments/model_weights_cob_activation_norm_teleported.onnx
 neuralteleportation/experiments/model_weights_cob_activation_norm.onnx
 neuralteleportation/experiments/input_data.npy
+neuralteleportation/experiments/sparse-cap-acc-tmp/log/output_log.txt
