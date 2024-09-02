@@ -158,3 +158,7 @@ neuralteleportation/experiments/model_weights_cob_activation_norm_teleported.onn
 neuralteleportation/experiments/model_weights_cob_activation_norm.onnx
 neuralteleportation/experiments/input_data.npy
 neuralteleportation/experiments/sparse-cap-acc-tmp/log/output_log.txt
+euralteleportation_env/
+euralteleportation_env
+euralteleportation_env/*
+neuralteleportation_env/
