@@ -1472,13 +1472,14 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
     loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
     loss /= original_loss
     # Calculate the prediction error
-    pred_error = np.abs(original_pred - pred.detach().cpu().numpy()).mean()
+    # pred_error = np.abs(original_pred - pred.detach().cpu().numpy()).mean()
+    pred_error = np.abs(original_pred - pred).mean()
     pred_error /= np.abs(original_pred).mean()
     # TODO: change the 10 with args.pred_mul (adding that to the function signature)
     total_loss = loss + 10 * pred_error
 
-    if random.random() < 0.0005:
-        print(f"pred_error: {pred_error} \t range_loss: {loss}")
+    # if random.random() < 0.0005:
+    #     print(f"pred_error: {pred_error} \t range_loss: {loss}")
 
     # Undo the teleportation
     teleported_model.undo_teleportation()
@@ -1496,6 +1497,7 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
 def worker_func_batch(args):
     idx_batch, key, base, params_dict, step_size, func = args
     perturbed_params_dict = copy.deepcopy(params_dict)
+    # perturbed_params_dict = params_dict
     p_flat = perturbed_params_dict[key].flatten()
     grads = []
     
@@ -1557,10 +1559,13 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_
         directional_derivative = torch.zeros_like(param)
         directional_derivative_flat = directional_derivative.flatten()
 
+        # set 50 percent of the mask to zero
+        mask_flat = mask_flat * torch.bernoulli(torch.full_like(mask_flat, 0.5))
+
         # Prepare batches of indices
         idx_list = mask_flat.nonzero().flatten().tolist()
         batches = [idx_list[i:i + batch_size] for i in range(0, len(idx_list), batch_size)]
-
+        
         # Create task arguments for each batch
         tasks = [(batch, key, base, params_dict, step_size, func) for batch in batches]
 
@@ -1615,7 +1620,7 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_
 
 #     return best_cob
 
-
+import time
 # Training loop using the persistent pool
 def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args):
     initial_cob_idx = torch.ones(960)  # Initial guess for COB
@@ -1634,24 +1639,30 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
     best_loss = float('inf')
 
     # Initialize the process pool once and reuse it for all iterations
-    with mp.Pool(5) as pool:
+    with mp.Pool(2) as pool:
         # Training loop to optimize COB
         for step in range(args.steps):
             # Get the gradient of the COB using the batched CGE with persistent pool
-            grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, batch_size=240)
-
+            t0 = time.time()
+            grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, batch_size=10)
+            t1 = time.time()
             # Update the COB using gradient descent
             initial_cob_idx -= args.cob_lr * grad_cob["cob"]
+            t2 = time.time()
 
             # Calculate the loss with the updated COB
             loss = ackley(initial_cob_idx)
+            t3 = time.time()
 
             # Update the best loss and COB if the current loss is better
             if loss < best_loss:
                 best_loss = loss
                 best_cob = initial_cob_idx.clone()  # Save the best COB
 
-            print(f"Step: {step} \t Loss: {loss}")
+                # print(f"Step: {step} \t Loss: {loss}")
+
+            print(f"Step: {step} \t Loss: {loss} \t Time: {t1-t0} {t2-t1} {t3-t2}")
+        
 
     return best_cob
 
@@ -1936,8 +1947,8 @@ if __name__ == '__main__':
                 # args.pred_mul = 20
                 args.steps = 800
                 # args.steps = 400
-                args.cob_lr = 0.1
-                args.zoo_step_size = 0.001 
+                args.cob_lr = 0.2
+                args.zoo_step_size = 0.001
 
                 # check the experiment_settings and layer_idx exists in the csv file
                 with open(csv_file_path, mode='r') as file:
