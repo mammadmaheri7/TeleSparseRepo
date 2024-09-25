@@ -1565,6 +1565,89 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
 
 
 
+
+def f_ack_parallel(cob, dim_indices, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None, step_size=0.01, base_loss=None):
+    """
+    Compute gradients for a subset of COB dimensions given by dim_indices.
+    Teleport the model with perturbed COB in each iteration.
+    """
+    teleported_model = copy.deepcopy(tm)  # Deep copy of the model to ensure each process has its own model
+    
+    gradients = torch.zeros_like(cob)  # Initialize gradient tensor
+    cob_flat = cob.flatten()
+
+    # Run inference and calculate the total loss with perturbed COB
+    activation_stats = {}
+    hook_handles = []
+    for i, layer in enumerate(teleported_model.network.children()):
+        if isinstance(layer, nn.ReLU) or isinstance(layer, nn.Sigmoid) or isinstance(layer, nn.GELU) or isinstance(layer, nn.LeakyReLU):
+            handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats))
+            hook_handles.append(handle)
+    teleported_model.eval()
+
+    if base_loss is None:
+        with torch.no_grad():
+            original_pred = teleported_model.network(input_data)
+            original_loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
+            original_loss /= original_loss
+            base_loss = original_loss
+
+    for idx in range(960):
+        # Teleport the model with the current COB (perturbing the current index)
+        cob_flat[idx] += step_size
+        teleported_model = teleported_model.teleport(cob, reset_teleportation=False)
+        
+        
+        with torch.no_grad():
+            pred = teleported_model.network(input_data)
+        
+        for handle in hook_handles:
+            handle.remove()
+
+        # Compute the loss based on range and prediction error
+        loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
+        loss /= original_loss
+        pred_error = torch.abs(original_pred - pred).mean()
+        pred_error /= torch.abs(original_pred).mean()
+        total_loss = loss + 10 * pred_error
+
+        # Compute gradient for the current index using the base loss
+        # print("total_loss:",total_loss, "\t base_loss:",base_loss)
+        gradients[idx] = (total_loss - base_loss) / step_size
+        
+        # Undo teleportation to reset model
+        teleported_model.undo_teleportation()
+        cob_flat[idx] -= step_size  # Revert the perturbation
+    
+    return gradients
+
+# IMPORT POOL
+from multiprocessing import Pool
+def compute_gradients_in_batches(cob, num_processes, input_data, original_pred, layer_idx, original_loss, tm, step_size=0.01):
+    """
+    Parallelize gradient calculation for different COB dimensions using multiple processes.
+    """
+    num_dims = cob.numel()
+    batch_size = num_dims // num_processes
+    dim_indices = [list(range(i, min(i + batch_size, num_dims))) for i in range(0, num_dims, batch_size)]
+
+    # Precompute base loss once to avoid redundant computation
+    base_loss = original_loss
+
+    # Prepare arguments for each process
+    args = [(cob.clone(), indices, input_data, original_pred, layer_idx, original_loss, tm, step_size, base_loss) for indices in dim_indices]
+
+    # Use multiprocessing to parallelize the gradient computation
+    with Pool(processes=num_processes) as pool:
+        gradient_batches = pool.starmap(f_ack_parallel, args)
+
+    # Combine the results from each process
+    total_gradients = torch.zeros_like(cob)
+    for grad in gradient_batches:
+        total_gradients += grad
+
+    return total_gradients
+
 if __name__ == '__main__':
     import os
     # Disable GPUs by setting CUDA_VISIBLE_DEVICES to an empty string
@@ -1916,7 +1999,52 @@ if __name__ == '__main__':
                     #     LN.network.load_state_dict(torch.load(args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth'))
                     #     best_loss = torch.tensor(best_loss).detach().cpu()
                     else:
-                        best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args)
+                        # best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args)
+                        best_loss = float('inf')
+                        best_cob = None
+                        initial_cob_idx = torch.ones(960)  # Initial guess for COB
+
+                        for step in range(args.steps):
+                            print(f"Step: {step}")
+                            # get the gradient of the cob
+                            grad_cob = compute_gradients_in_batches(initial_cob_idx, num_processes=4, input_data=input_teleported_model,
+                                            original_pred=original_pred, layer_idx=layer_idx, original_loss=original_loss_idx, tm=LN)
+
+                            # update the cob
+                            initial_cob_idx -= args.cob_lr * grad_cob
+                            # calculate the loss
+                            # loss = ackley(initial_cob_idx)
+                            print("=====")
+                            
+                            # loss = f_ack_parallel(initial_cob_idx, range(960), input_data=input_teleported_model,
+                            #     original_pred=original_pred, layer_idx=layer_idx, original_loss=original_loss_idx, tm=LN, base_loss=None)
+                            # comput loss based on COB
+                            # add the hook to the model
+                            tmp_model = copy.deepcopy(LN)
+                            tmp_model = tmp_model.teleport(initial_cob_idx, reset_teleportation=False)
+                            # Hook for the intermediate output of the block
+                            tmp_mlp_idx = tmp_model.network
+                            activation_stats_idx = {}
+                            for i,layer in enumerate(tmp_mlp_idx.children()):
+                                if isinstance(layer, nn.ReLU) or isinstance(layer, nn.Sigmoid) or isinstance(layer, nn.GELU) or isinstance(layer, nn.LeakyReLU):
+                                    layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats_idx))
+                            # run the mlp model to find loss
+                            tmp_pred = tmp_model.network(input_teleported_model)
+                            loss = sum([stats['max'] - stats['min'] for stats in activation_stats_idx.values()])
+                            loss /= original_loss_idx
+                            # calculate the prediction error
+                            pred_error = torch.abs(original_pred - tmp_pred).mean()
+                            pred_error /= torch.abs(original_pred).mean()
+                            loss += 10 * pred_error
+
+
+                            # update the best loss
+                            if loss < best_loss:
+                                best_loss = loss
+                                best_cob = initial_cob_idx
+                                print(f"Step: {step} \t Loss: {loss}")
+
+                        print("BEST LOSS:",best_loss)
                         print("BEST LOSS:",best_loss)
                         LN = LN.teleport(best_cob, reset_teleportation=True)
                         # save the .pth of the teleported model
