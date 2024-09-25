@@ -13,6 +13,7 @@ import torch.nn.functional as Fhtop
 import argparse
 
 import argparse
+import ezkl
 
 def get_args_parser(initial_args=None):
     parser = argparse.ArgumentParser('ConvNeXt training and evaluation script for image classification', add_help=False)
@@ -1050,7 +1051,6 @@ class Attention(nn.Module):
 #         return x
         return y
 
-
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
@@ -1102,9 +1102,6 @@ class Block(nn.Module):
         x = x + self.drop_path(self.attn(norm_x))
         
         return x
-        
-
-
 
 class PatchEmbed(nn.Module):
     """ Image to Patch Embedding
@@ -1443,7 +1440,8 @@ import multiprocessing as mp
 # Activation hook for storing activation statistics
 def activation_hook(name, activation_stats):
     def hook(module, input, output):
-        activation_stats[name] = {'min': output.min().item(), 'max': output.max().item()}
+        input_tensor = input[0]
+        activation_stats[name] = {'min': input_tensor.min().item(), 'max': input_tensor.max().item()}
     return hook
 
 # The function that calculates loss based on COB and runs inference
@@ -1475,6 +1473,7 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
     # pred_error = np.abs(original_pred - pred.detach().cpu().numpy()).mean()
     pred_error = np.abs(original_pred - pred).mean()
     pred_error /= np.abs(original_pred).mean()
+    pred_error = pred_error.item()
     # TODO: change the 10 with args.pred_mul (adding that to the function signature)
     total_loss = loss + 10 * pred_error
 
@@ -1483,7 +1482,7 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
 
     # Undo the teleportation
     teleported_model.undo_teleportation()
-    return total_loss.detach().cpu().numpy()
+    return total_loss, loss, pred_error
 
 # # Worker function for parallel gradient computation
 # def worker_func(args):
@@ -1504,7 +1503,8 @@ def worker_func_batch(args):
     # Compute gradients for each perturbation in the batch
     for idx in idx_batch:
         p_flat[idx] += step_size
-        directional_derivative = (func(perturbed_params_dict["cob"]) - base) / step_size
+        out,_,_ = func(perturbed_params_dict["cob"])
+        directional_derivative = (out - base) / step_size
         grads.append((idx, directional_derivative))
         p_flat[idx] -= step_size  # Reset the perturbation
 
@@ -1546,7 +1546,7 @@ def worker_func_batch(args):
 @torch.no_grad()
 def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_size=50):
     if base is None:
-        base = func(params_dict["cob"])
+        base,_,_ = func(params_dict["cob"])
 
     grads_dict = {}
     for key, param in params_dict.items():
@@ -1636,35 +1636,42 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
     )
 
     best_cob = None
-    best_loss = float('inf')
+    # best_loss = float('inf')
 
-    # Initialize the process pool once and reuse it for all iterations
-    with mp.Pool(2) as pool:
-        # Training loop to optimize COB
-        for step in range(args.steps):
-            # Get the gradient of the COB using the batched CGE with persistent pool
-            t0 = time.time()
-            grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, batch_size=10)
-            t1 = time.time()
-            # Update the COB using gradient descent
-            initial_cob_idx -= args.cob_lr * grad_cob["cob"]
-            t2 = time.time()
+    with mp.Manager() as manager:
+        best_loss = manager.Value('d', float('inf'))  # Shared float variable for the best loss
+        cor_best_pred_error = manager.Value('d', 0.0)  # Shared float variable for prediction error
+        cor_best_range = manager.Value('d', 0.0)  # Shared float variable fo
 
-            # Calculate the loss with the updated COB
-            loss = ackley(initial_cob_idx)
-            t3 = time.time()
+        # Initialize the process pool once and reuse it for all iterations
+        with mp.Pool(2) as pool:
+            # Training loop to optimize COB
+            for step in range(args.steps):
+                # Get the gradient of the COB using the batched CGE with persistent pool
+                t0 = time.time()
+                grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, batch_size=10)
+                t1 = time.time()
+                # Update the COB using gradient descent
+                initial_cob_idx -= args.cob_lr * grad_cob["cob"]
+                t2 = time.time()
 
-            # Update the best loss and COB if the current loss is better
-            if loss < best_loss:
-                best_loss = loss
-                best_cob = initial_cob_idx.clone()  # Save the best COB
+                # Calculate the loss with the updated COB
+                loss,r_error,p_error = ackley(initial_cob_idx)
+                t3 = time.time()
 
-                # print(f"Step: {step} \t Loss: {loss}")
+                # Update the best loss and COB if the current loss is better
+                if loss < best_loss.value:
+                    best_loss.value = loss
+                    best_cob = initial_cob_idx.clone()  # Save the best COB
+                    cor_best_pred_error.value = p_error
+                    cor_best_range.value = r_error
 
-            print(f"Step: {step} \t Loss: {loss} \t Time: {t1-t0} {t2-t1} {t3-t2}")
-        
+                    # print(f"Step: {step} \t Loss: {loss}")
 
-    return best_cob
+                print(f"Step: {step} \t Loss: {loss} \t Time: {t1-t0} {t2-t1} {t3-t2}")
+            
+
+        return best_cob, best_loss.value, cor_best_range.value, cor_best_pred_error.value
 
 
 # Example usage (assuming args, input data, and model are correctly set up)
@@ -1702,20 +1709,31 @@ if __name__ == '__main__':
     default_num_cols = 2
     default_scale_rebase_multiplier = 1
 
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('--model', default=default_model, type=str, help='Model type')
-    parser.add_argument('--data_path', default=default_data_path, type=str, help='Data path')
-    parser.add_argument('--resume', default=default_resume, type=str, help='Resume path')
-    parser.add_argument('--sparsity', default=default_sparsity, type=float, help='Sparsity value')
-    parser.add_argument('--batch_size', default=default_batch_size, type=int, help='Batch size')
-    parser.add_argument('--pruning_method', default=default_pruning_method, type=str, help='Pruning method')
-    parser.add_argument('--prefix_dir', default=default_prefix_dir, type=str, help='Prefix directory')
-    parser.add_argument('--input_param_scale', default=default_input_param_scale, type=int, help='Input parameter scale')
-    parser.add_argument('--log_rows', default=default_log_rows, type=int, help='Log rows')
-    parser.add_argument('--num_cols', default=default_num_cols, type=int, help='Number of columns')
-    parser.add_argument('--scale_rebase_multiplier', default=default_scale_rebase_multiplier, type=int, help='Scale rebase multiplier')
+    # parser = argparse.ArgumentParser(description='Process some integers.')
+    # parser.add_argument('--model', default=default_model, type=str, help='Model type')
+    # parser.add_argument('--data_path', default=default_data_path, type=str, help='Data path')
+    # parser.add_argument('--resume', default=default_resume, type=str, help='Resume path')
+    # parser.add_argument('--sparsity', default=default_sparsity, type=float, help='Sparsity value')
+    # parser.add_argument('--batch_size', default=default_batch_size, type=int, help='Batch size')
+    # parser.add_argument('--pruning_method', default=default_pruning_method, type=str, help='Pruning method')
+    # parser.add_argument('--prefix_dir', default=default_prefix_dir, type=str, help='Prefix directory')
+    # parser.add_argument('--input_param_scale', default=default_input_param_scale, type=int, help='Input parameter scale')
+    # parser.add_argument('--log_rows', default=default_log_rows, type=int, help='Log rows')
+    # parser.add_argument('--num_cols', default=default_num_cols, type=int, help='Number of columns')
+    # parser.add_argument('--scale_rebase_multiplier', default=default_scale_rebase_multiplier, type=int, help='Scale rebase multiplier')
+    # args = parser.parse_args(namespace=args)
+    args.model = default_model
+    args.data_path = default_data_path
+    args.resume = default_resume
+    args.sparsity = default_sparsity
+    args.batch_size = default_batch_size
+    args.pruning_method = default_pruning_method
+    args.prefix_dir = default_prefix_dir
+    args.input_param_scale = default_input_param_scale
+    args.log_rows = default_log_rows
+    args.num_cols = default_num_cols
+    args.scale_rebase_multiplier = default_scale_rebase_multiplier
 
-    args = parser.parse_args(namespace=args)
     os.makedirs(args.prefix_dir, exist_ok=True)
 
     BATCHS = args.batch_size
@@ -1783,6 +1801,7 @@ if __name__ == '__main__':
     from torchvision import datasets, transforms
 
     img = Image.open("/Users/mm6322/Phd research/nerual_transport/neuralteleportation/neuralteleportation/experiments/sparse-cap-acc-tmp/ILSVRC2012_val_00000616.JPEG")
+    img_name = "ILSVRC2012_val_00000616.JPEG"
     # img = Image.open("/rds/general/user/mm6322/home/imagenet/val/n12620546/ILSVRC2012_val_00011901.JPEG")
 
     img = img.resize((224,224))
@@ -1791,9 +1810,10 @@ if __name__ == '__main__':
 
 
 
-    print("data shape:",data.shape)
-    result = model(data)
-    print(result.shape)
+    # print("data shape:",data.shape)
+    # result = model(data)
+    # print(result.shape)
+    # network_input_data = copy.deepcopy(data)
 
 
     import json
@@ -1816,6 +1836,13 @@ if __name__ == '__main__':
                         'output': {0:'batch_size'},
         },         
     )
+
+    inter_out = model.split_convs(data)
+    print("layer_idx:\t","CONV","\t half:",str(False),"\t inter_out.shape:",inter_out.shape,"\t min:",inter_out.min(),"\t max:",inter_out.max())
+    for layer_idx in range(model.depth):
+        for half in [True,False]:
+            inter_out = model.split_n(data,layer_idx,half)
+            print("layer_idx:\t",layer_idx,"\t half:",str(half),"\t inter_out.shape:",inter_out.shape,"\t min:",inter_out.min(),"\t max:",inter_out.max())
 
     import onnx
     on = onnx.load(args.prefix_dir + "network_complete.onnx")
@@ -1889,38 +1916,42 @@ if __name__ == '__main__':
     # Define the CSV file and write the header if it doesn't exist
     import csv
 
-    csv_file_path = args.prefix_dir + 'all_settings_deepzero.csv'
+    csv_file_path = args.prefix_dir + 'ZO-accuracy.csv'
     if not os.path.exists(csv_file_path):
         with open(csv_file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow([
                 'EXPERIMENT SETTINGS',
-                'Model_Number', 'Layer_Index',
-                # 'Activation_Loss', 'Prediction_Error',
-                'Activation_Loss',
-                'Input_Scale', 'Param_Scale', 'Scale_Rebase_Multiplier',
-                'Lookup_Range_0', 'Lookup_Range_1', 'Logrows', 'Num_Rows', 'Num_cols', 'Total_Assignments',
-                'Total_Constant_Size', 'Model_Output_Scales', 
-                'Required_Range_Checks_0','Required_Range_Checks_1', 'Proof_Time_Seconds', 'Max_Memory' ,'Mean_Squared_Error', 'Mean_Abs_Percent_Error',
+                'Layer_Index', 'Sample_Name',
+                'Activation_Loss_Org', 'Range_Error' ,'Prediction_Error',
+                # # 'Activation_Loss',
+                # 'Input_Scale', 'Param_Scale', 'Scale_Rebase_Multiplier',
+                # 'Lookup_Range_0', 'Lookup_Range_1', 'Logrows', 'Num_Rows', 'Num_cols', 'Total_Assignments',
+                # 'Total_Constant_Size', 'Model_Output_Scales', 
+                # 'Required_Range_Checks_0','Required_Range_Checks_1', 'Proof_Time_Seconds', 'Max_Memory' ,'Mean_Squared_Error', 'Mean_Abs_Percent_Error',
         ])
             
-
-
-
-
-
     
     array_param_visibility = ["fixed"]
-    array_input_param_scale = [16,17,18,19,20]
-    array_num_cols = [64,32,16]
-    array_max_log_rows = [16,17,18,19,20]
+    array_input_param_scale = [16]
+    array_num_cols = [64]
+    array_max_log_rows = [16]
     array_scale_rebase = [1]
     array_lookup_margin = [2]
 
     # iterate over all the possible combinations
     combinations = list(itertools.product(array_param_visibility, array_input_param_scale, array_num_cols, array_max_log_rows, array_scale_rebase, array_lookup_margin))
     # the layer_idx which the logrows are equal to 20 are not gonna be teleported
+    # list_of_no_teleportation = [1,3,4,5]
     list_of_no_teleportation = [1,3,4,5]
+    # list_jpeg = ["ILSVRC2012_val_00000616.JPEG"]
+    # list_jpeg is all jpeg file in the folder images
+    list_jpeg = os.listdir("/Users/mm6322/Phd research/nerual_transport/neuralteleportation/neuralteleportation/experiments/sparse-cap-acc-tmp/images")
+    list_jpeg = [x for x in list_jpeg if x.endswith(".JPEG")]
+
+    # computing accuracy of the teleportation
+    teleport_correct = 0
+    teleport_total = 0
 
     # with no gradient pytorch
     with torch.no_grad():
@@ -1938,124 +1969,124 @@ if __name__ == '__main__':
             # generate compression-model and setting for all vit layers
             # for layer_idx in range(model.depth):
             # TODO: uncomment the line above and comment the line below
-            for layer_idx in [0]:
+            for jpeg_path in list_jpeg:
+                img = Image.open(f"/Users/mm6322/Phd research/nerual_transport/neuralteleportation/neuralteleportation/experiments/sparse-cap-acc-tmp/images/{jpeg_path}")
+                img_name = os.path.splitext(jpeg_path)[0]
+                img = img.resize((224,224))
+                data = transforms.ToTensor()(img).unsqueeze(0)
+                # inference on original model
+                result = model(data)
+                network_input_data = copy.deepcopy(data)
 
-                # if layer_idx >= 4:
-                #     continue
+                # generate data for all layers
+                data_path = os.path.join(os.getcwd(),args.prefix_dir, f"input_convs.json")
+                data_dict = dict(input_data = [((data).detach().numpy()).reshape([-1]).tolist()])
+                json.dump( data_dict, open(data_path, 'w' ))
 
-                args.pred_mul = 10
-                # args.pred_mul = 20
-                args.steps = 800
-                # args.steps = 400
-                args.cob_lr = 0.2
-                args.zoo_step_size = 0.001
 
-                # check the experiment_settings and layer_idx exists in the csv file
-                with open(csv_file_path, mode='r') as file:
-                    reader = csv.reader(file)
-                    exist_flag = False
-                    for row in reader:
-                        if row[0] == experiment_settings and int(row[2]) == layer_idx:
-                            print(f"Experiment settings: {experiment_settings} and layer_idx: {layer_idx} already exists in the csv file.")
-                            exist_flag = True
-                            break
-                # if exist_flag:
-                #     continue
+                for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:
 
-                # Hook for the intermediate output of the block
-                original_mlp_idx = model.blocks[layer_idx].mlp
-                activation_stats_idx = {}
-                for i,layer in enumerate(original_mlp_idx.children()):
-                    if isinstance(layer, nn.ReLU) or isinstance(layer, nn.Sigmoid) or isinstance(layer, nn.GELU) or isinstance(layer, nn.LeakyReLU):
-                        layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats_idx))
-                # run the mlp model to find original_loss
-                input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
-                original_block_idx_pred = model.split_n(torch.tensor(input_convs).view(BATCHS,3,224,224),layer_idx,half=False)
-                
-                # print activation stats
-                print(f"layer_idx: {layer_idx} , \t  activation_stats: {activation_stats_idx}")
-                original_loss_idx = sum([stats['max'] - stats['min'] for stats in activation_stats_idx.values()])
-                print("ORIGINAL LOSS:",original_loss_idx)
+                    args.pred_mul = 10
+                    args.steps = 200
+                    args.cob_lr = 0.2
+                    args.zoo_step_size = 0.0005
 
-                # # Load the teleported model
-                # teleported_model_idx = LinearNet()
-                # teleported_model_idx = NeuralTeleportationModel(teleported_model_idx, input_shape=(1, 197, 192))
-                # load_ln_weights(teleported_model_idx, model, layer_idx)
+                    # Hook for the intermediate output of the block
+                    original_mlp_idx = model.blocks[layer_idx].mlp
+                    activation_stats_idx = {}
+                    for i,layer in enumerate(original_mlp_idx.children()):
+                        if isinstance(layer, nn.ReLU) or isinstance(layer, nn.Sigmoid) or isinstance(layer, nn.GELU) or isinstance(layer, nn.LeakyReLU):
+                            layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats_idx))
+                    # run the mlp model to find original_loss
+                    # create input_convs based on 
+                    input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
+                    original_block_idx_pred = model.split_n(torch.tensor(input_convs).view(BATCHS,3,224,224),layer_idx,half=False)
+                    # print activation stats
+                    print(f"layer_idx: {layer_idx} , \t  activation_stats: {activation_stats_idx}")
+                    original_loss_idx = sum([stats['max'] - stats['min'] for stats in activation_stats_idx.values()])
+                    print("ORIGINAL LOSS:",original_loss_idx)
 
-                # # get initial weights and cob
-                # initial_weights_idx = teleported_model_idx.get_weights().detach()
-                # initial_cob_idx = teleported_model_idx.generate_random_cob(cob_range=args.cob_range, requires_grad=True,center=args.center,sampling_type=args.sample_type)
+                    # track best loss
+                    best_loss = 1e9
+                    cor_best_pred_error = 1e9
+                    cor_best_range = 1e9
 
-                # track best loss
-                best_loss = 1e9
-
-                # define input_teleported_model (used in ng_loss_function)
-                input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
-                input_convs = torch.tensor(input_convs).view(1,3,224,224)
-                input_teleported_model = new_model.split_n(input_convs,layer_idx,half=True)
-                # save npy file using in python checking script
-                np.save(args.prefix_dir + f"input_teleported_model_{layer_idx}.npy", input_teleported_model.detach().numpy())
-                # define original_pred (used in ng_loss_function)
-                input_org = model.split_n(input_convs,layer_idx,half=True)
-                np.save(args.prefix_dir + f"input_org_{layer_idx}.npy", input_org.detach().numpy())
-                original_pred = model.blocks[layer_idx].mlp(model.blocks[layer_idx].norm2(input_org))
-
-                # Apply best COB and save model weights
-                LN = LinearNet()
-                LN = NeuralTeleportationModel(LN, input_shape=(1, 197, 192))
-                load_ln_weights(LN, model, layer_idx)
-
-                if layer_idx in list_of_no_teleportation:
-                    print("====== NO OPTIMIZATION SINCE NO TELEPORTATION =====")
-                    best_loss = torch.tensor(best_loss).detach().cpu()
-                    LN = LN.teleport(torch.ones_like(torch.ones(960)), reset_teleportation=True)
-                    torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
-                # check whether the teleportation .pth already exists
-                elif os.path.exists(args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth'):
-                    print(f"block{layer_idx}_cob_activation_norm_teleported.pth already exists.")
-                    LN.network.load_state_dict(torch.load(args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth'))
-                    best_loss = torch.tensor(best_loss).detach().cpu()
-                else:
-                    # zero-order derivative optimization
-                    # if args.teleport_gaussian and layer_idx != 2 and layer_idx != 3:
-
-                    # initial_cob_idx = torch.ones(960)
-
-                    # # add inputs to the function
-                    # ackley = functools.partial(
-                    #     f_ack,
-                    #     input_data=input_teleported_model,
-                    #     original_pred=original_pred,
-                    #     layer_idx=layer_idx,
-                    #     original_loss = original_loss_idx,\
-                    #     tm = LN
-                    # )
-
-                    # # training to find best_cob
-                    # best_cob = None
-                    # for step in range(args.steps):
-                    #     # get the gradient of the cob
-                    #     grad_cob = cge(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size)
-                    #     # update the cob
-                    #     initial_cob_idx -= args.cob_lr * grad_cob["cob"]
-                    #     # calculate the loss
-                    #     loss = ackley(initial_cob_idx)
-                    #     # update the best loss
-                    #     if loss < best_loss:
-                    #         best_loss = loss
-                    #         best_cob = initial_cob_idx
-                    #         print(f"Step: {step} \t Loss: {loss}")
-
-                    best_cob = train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args)
-
-                    print("BEST LOSS:",best_loss)
+                    # define input_teleported_model (used in ng_loss_function)
+                    input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
+                    input_convs = torch.tensor(input_convs).view(1,3,224,224)
+                    input_teleported_model = new_model.split_n(input_convs,layer_idx,half=True)
+                    # save npy file using in python checking script
+                    np.save(args.prefix_dir + f"input_teleported_model_{layer_idx}.npy", input_teleported_model.detach().numpy())
+                    # define original_pred (used in ng_loss_function)
+                    input_org = model.split_n(input_convs,layer_idx,half=True)
+                    np.save(args.prefix_dir + f"input_org_{layer_idx}.npy", input_org.detach().numpy())
+                    original_pred = model.blocks[layer_idx].mlp(model.blocks[layer_idx].norm2(input_org))
 
                     # Apply best COB and save model weights
-                    if layer_idx in list_of_no_teleportation:
-                        print("====== NO TELEPORTATION =====")
-                    else:
-                        LN = LN.teleport(best_cob, reset_teleportation=True)
-                    # save the .pth of the teleported model
-                    torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
+                    LN = LinearNet()
+                    LN = NeuralTeleportationModel(LN, input_shape=(1, 197, 192))
+                    load_ln_weights(LN, model, layer_idx)
 
+                    if layer_idx in list_of_no_teleportation:
+                        print("====== NO OPTIMIZATION SINCE NO TELEPORTATION =====")
+                        best_loss = torch.tensor(best_loss).detach().cpu()
+                        LN = LN.teleport(torch.ones_like(torch.ones(960)), reset_teleportation=True)
+                        torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
+                        cor_best_range = 1
+                        cor_best_pred_error = 0
+                    # check whether the teleportation .pth already exists
+                    # elif os.path.exists(args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth'):
+                    #     print(f"block{layer_idx}_cob_activation_norm_teleported.pth already exists.")
+                    #     LN.network.load_state_dict(torch.load(args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth'))
+                    #     best_loss = torch.tensor(best_loss).detach().cpu()
+                    else:
+                        best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args)
+                        print("BEST LOSS:",best_loss)
+                        LN = LN.teleport(best_cob, reset_teleportation=True)
+                        # save the .pth of the teleported model
+                        torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
+                    
+                    # Apply the teleportation to the new_model (Using for computing the next layer inputs)
+                    sd = LN.network.state_dict()
+                    sd = {k: v for k, v in sd.items() if 'norm2' not in k}
+                    new_model.blocks[layer_idx].mlp.load_state_dict(sd)
+                    sd = LN.network.state_dict()
+                    sd = {k.replace('norm2.',''): v for k, v in sd.items() if 'norm2' in k}
+                    new_model.blocks[layer_idx].norm2.load_state_dict(sd)
+
+                    # Export the optimized model to ONNX
+                    torch.onnx.export(LN.network, input_teleported_model, args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.onnx', verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
+
+                    # check the validation of the teleportation
+                    # 1.extract onnx corrosponding to the teleported model (in original onnx)
+                    input_path = args.prefix_dir + f"network_split_{layer_idx}_False.onnx"
+                    output_path = args.prefix_dir + f"block{layer_idx}_cob_activation_norm.onnx"
+                    input_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
+                    output_names = [f"/blocks.{layer_idx}/mlp/fc2/Add_output_0"]
+                    onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
                 
+                    # write the results to the csv file
+                    with open(csv_file_path, mode='a', newline='') as file:
+                        writer = csv.writer(file)
+                        writer.writerow([
+                            experiment_settings,
+                            layer_idx, img_name,
+                            original_loss_idx, cor_best_range, cor_best_pred_error,
+                        ])
+                    
+                    print("\n\n")
+
+                # compute the new prediction of model (after all layers are teleported)
+                new_pred = new_model(network_input_data)
+                # check whether the teleportation is successful
+                print("MAX ARGUMENT NEW PREDICTION:", new_pred.argmax())
+                print("ORIGINAL PREDICTION:", result.argmax())
+                if new_pred.argmax() == result.argmax():
+                    teleport_correct += 1
+                teleport_total += 1
+                print("ACCURACY OF TELEPORTATION:", teleport_correct/teleport_total)
+                # log on the file txt (append the accuracy of teleportation + number of corrot and total)
+                with open(args.prefix_dir + "accuracy_teleportation.txt", "a") as f:
+                    f.write(f"ACCURACY OF TELEPORTATION: {teleport_correct/teleport_total} \t CORRECT: {teleport_correct} \t TOTAL: {teleport_total}\n")
+                print("==========================")
+                time.sleep(2)
