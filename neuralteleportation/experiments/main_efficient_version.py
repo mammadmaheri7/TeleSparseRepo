@@ -1446,9 +1446,7 @@ def activation_hook(name, activation_stats):
 
 # The function that calculates loss based on COB and runs inference
 def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None):    
-    # Set up model with the new COB
-    teleported_model = tm
-    # Apply the COB
+    teleported_model = copy.deepcopy(tm)  # Clone the model for each process
     teleported_model = teleported_model.teleport(cob, reset_teleportation=False)
 
     # Reset activation stats and run a forward pass
@@ -1469,65 +1467,29 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
     # Calculate the range loss
     loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
     loss /= original_loss
+
     # Calculate the prediction error
-    # pred_error = np.abs(original_pred - pred.detach().cpu().numpy()).mean()
+    pred = pred.detach().cpu().numpy()
     pred_error = np.abs(original_pred - pred).mean()
     pred_error /= np.abs(original_pred).mean()
-    pred_error = pred_error.item()
-    # TODO: change the 10 with args.pred_mul (adding that to the function signature)
     total_loss = loss + 10 * pred_error
 
-    # if random.random() < 0.0005:
-    #     print(f"pred_error: {pred_error} \t range_loss: {loss}")
-
-    # Undo the teleportation
     teleported_model.undo_teleportation()
     return total_loss, loss, pred_error
 
+# Worker function to compute gradients in a batch
 def worker_func_batch(batch, key, base, params_dict, step_size, func):
     results = []
+    param_copy = params_dict[key].clone()  # Clone once
     for idx in batch:
-        # Perform forward pass for each index in the batch
-        param_copy = params_dict[key].clone()
-        param_copy[idx] += step_size  # Apply step size to current index
-        loss, _, _ = func(param_copy)  # Compute the loss
-        grad = (loss - base) / step_size  # Compute gradient using finite difference
-        results.append((idx, grad))  # Collect the gradient
+        param_copy[idx] += step_size  # Apply step size
+        loss, _, _ = func(param_copy)
+        grad = (loss - base) / step_size  # Finite difference gradient
+        results.append((idx, grad))
     return results
 
-# # Parallelized CGE implementation
-# @torch.no_grad()
-# def cge_parallel(func, params_dict, mask_dict, step_size, base=None, num_workers=4):
-#     if base is None:
-#         base = func(params_dict["cob"])
 
-#     grads_dict = {}
-#     for key, param in params_dict.items():
-#         if 'orig' in key:
-#             mask_key = key.replace('orig', 'mask')
-#             mask_flat = mask_dict[mask_key].flatten()
-#         else:
-#             mask_flat = torch.ones_like(param).flatten()
-        
-#         directional_derivative = torch.zeros_like(param)
-#         directional_derivative_flat = directional_derivative.flatten()
-
-#         # Prepare the tasks for each index to be processed in parallel
-#         tasks = [(idx.item(), key, base, params_dict, step_size, func) for idx in mask_flat.nonzero()]
-
-#         # Create a pool of workers and distribute tasks
-#         with mp.Pool(num_workers) as pool:
-#             results = pool.map(worker_func, tasks)
-
-#         # Collect the results and fill the directional_derivative tensor
-#         for idx, grad in results:
-#             directional_derivative_flat[idx] = grad
-
-#         grads_dict[key] = directional_derivative.to(param.device)
-    
-#     return grads_dict
-
-# Batched CGE using multiprocessing
+# Batched CGE with multiprocessing
 @torch.no_grad()
 def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_size=50):
     if base is None:
@@ -1536,21 +1498,17 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_
     grads_dict = {}
     for key, param in params_dict.items():
         mask_flat = torch.ones_like(param).flatten()
-        mask_flat = mask_flat * torch.bernoulli(torch.full_like(mask_flat, 0.5))  # Masking with 50% probability
+        mask_flat *= torch.bernoulli(torch.full_like(mask_flat, 0.5))  # Mask with 50% probability
 
-        # Prepare list of indices to compute gradients for
         idx_list = mask_flat.nonzero().flatten().tolist()
-        
-        # Split the indices into batches
         batches = [idx_list[i:i + batch_size] for i in range(0, len(idx_list), batch_size)]
-        
-        # Create tasks for the worker pool
+
+        # Ensure that each task is a tuple of arguments
         tasks = [(batch, key, base, params_dict, step_size, func) for batch in batches]
-        
-        # Distribute tasks using starmap for parallel execution
+
+        # Use starmap or imap_unordered to handle task execution with correct argument unpacking
         results = pool.starmap(worker_func_batch, tasks)
-        
-        # Collect results and update the gradient tensor
+
         directional_derivative_flat = torch.zeros_like(param).flatten()
         for result_batch in results:
             for idx, grad in result_batch:
@@ -1561,13 +1519,18 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_
     return grads_dict
 
 
+
+
 import time
-# Training loop using the persistent pool
+# Training loop
 def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args):
     initial_cob_idx = torch.ones(960)  # Initial guess for COB
-    best_cob = None
 
-    # Prepare the function for constrained gradient estimation
+    best_cob = None
+    best_loss = float('inf')
+    cor_best_pred_error = 0.0
+    cor_best_range = 0.0
+
     ackley = functools.partial(
         f_ack,
         input_data=input_teleported_model,
@@ -1577,36 +1540,25 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
         tm=LN
     )
 
-    # Shared variables are avoided to minimize deadlock risks
-    best_loss = float('inf')
-    cor_best_pred_error = 0.0
-    cor_best_range = 0.0
-
-    # Use multiprocessing with a dynamic pool size based on available CPU cores
     with mp.Pool(processes=mp.cpu_count()) as pool:
         for step in range(args.steps):
             t0 = time.time()
 
-            # Compute the gradient using parallel processing with batched tasks
             grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, batch_size=mp.cpu_count())
             t1 = time.time()
-            
-            # Update COB using the computed gradients
+
             initial_cob_idx -= args.cob_lr * grad_cob["cob"]
             t2 = time.time()
-            
-            # Calculate loss with the updated COB
+
             loss, r_error, p_error = ackley(initial_cob_idx)
             t3 = time.time()
 
-            # Track the best COB based on the loss value
             if loss < best_loss:
                 best_loss = loss
                 best_cob = initial_cob_idx.clone()
                 cor_best_pred_error = p_error
                 cor_best_range = r_error
 
-            # Logging the timing and results for each step
             print(f"Step: {step} \t Loss: {loss} \t Time: {t1-t0:.2f}s {t2-t1:.2f}s {t3-t2:.2f}s")
 
     return best_cob, best_loss, cor_best_range, cor_best_pred_error
