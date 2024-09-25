@@ -1566,6 +1566,9 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
 
 
 if __name__ == '__main__':
+    import os
+    # Disable GPUs by setting CUDA_VISIBLE_DEVICES to an empty string
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
     args = get_default_args()
     print(args.__dict__)
 
