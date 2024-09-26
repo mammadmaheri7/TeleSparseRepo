@@ -1698,7 +1698,7 @@ if __name__ == '__main__':
 
     default_model = "vit_tiny"
     default_data_path = "/rds/general/user/mm6322/home/imagenet"
-    default_resume = "/Users/mm6322/Phd research/nerual_transport/neuralteleportation/neuralteleportation/experiments/sparse-cap-acc-tmp/deit_tiny_patch16_224_sparsity=0.50_best.pth"
+    default_resume = "./sparse-cap-acc-tmp/deit_tiny_patch16_224_sparsity=0.50_best.pth"
     # default_resume = "/rds/general/user/mm6322/home/verifiable_NN_ezkl/examples/notebooks/CAP_pruned_models/Checkpoints/deit_tiny_patch16_224_sparsity=0.50_best.pth"
     default_sparsity = 0.5
     default_batch_size = 1
