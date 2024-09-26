@@ -1435,7 +1435,7 @@ import torch.nn as nn
 import numpy as np
 import random
 import functools
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 # Activation hook for storing activation statistics
 def activation_hook(name, activation_stats):
@@ -1544,7 +1544,7 @@ def worker_func_batch(args):
 
 # Batched CGE using multiprocessing
 @torch.no_grad()
-def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_size=50):
+def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, num_process=4):
     if base is None:
         base,_,_ = func(params_dict["cob"])
 
@@ -1564,6 +1564,7 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_
 
         # Prepare batches of indices
         idx_list = mask_flat.nonzero().flatten().tolist()
+        batch_size = len(idx_list) // num_process
         batches = [idx_list[i:i + batch_size] for i in range(0, len(idx_list), batch_size)]
         
         # Create task arguments for each batch
@@ -1637,6 +1638,7 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
 
     best_cob = None
     # best_loss = float('inf')
+    num_process = 2
 
     with mp.Manager() as manager:
         best_loss = manager.Value('d', float('inf'))  # Shared float variable for the best loss
@@ -1644,12 +1646,12 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
         cor_best_range = manager.Value('d', 0.0)  # Shared float variable fo
 
         # Initialize the process pool once and reuse it for all iterations
-        with mp.Pool(2) as pool:
+        with mp.Pool(num_process) as pool:
             # Training loop to optimize COB
             for step in range(args.steps):
                 # Get the gradient of the COB using the batched CGE with persistent pool
                 t0 = time.time()
-                grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, batch_size=10)
+                grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, num_process=num_process)
                 t1 = time.time()
                 # Update the COB using gradient descent
                 initial_cob_idx -= args.cob_lr * grad_cob["cob"]
@@ -1693,6 +1695,8 @@ def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_id
 
 
 if __name__ == '__main__':
+    # set spawn start method
+    mp.set_start_method('spawn', force=True)
     args = get_default_args()
     print(args.__dict__)
 
