@@ -1564,7 +1564,12 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, num_pr
 
         # Prepare batches of indices
         idx_list = mask_flat.nonzero().flatten().tolist()
-        batch_size = len(idx_list) // num_process
+        # batch_size = len(idx_list) // num_process
+        # check whether the batch size is dividable by the number of processes to make sure that each process gets the same number of indices
+        if len(idx_list) % num_process != 0:
+            batch_size = len(idx_list) // num_process + 1
+        else:
+            batch_size = len(idx_list) // num_process
         batches = [idx_list[i:i + batch_size] for i in range(0, len(idx_list), batch_size)]
         
         # Create task arguments for each batch
