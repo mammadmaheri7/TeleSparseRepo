@@ -1435,7 +1435,7 @@ import torch.nn as nn
 import numpy as np
 import random
 import functools
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 # Activation hook for storing activation statistics
 def activation_hook(name, activation_stats):
