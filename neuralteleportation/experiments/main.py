@@ -1800,7 +1800,7 @@ if __name__ == '__main__':
     from PIL import Image
     from torchvision import datasets, transforms
 
-    img = Image.open("/Users/mm6322/Phd research/nerual_transport/neuralteleportation/neuralteleportation/experiments/sparse-cap-acc-tmp/ILSVRC2012_val_00000616.JPEG")
+    img = Image.open("./sparse-cap-acc-tmp/ILSVRC2012_val_00000616.JPEG")
     img_name = "ILSVRC2012_val_00000616.JPEG"
     # img = Image.open("/rds/general/user/mm6322/home/imagenet/val/n12620546/ILSVRC2012_val_00011901.JPEG")
 

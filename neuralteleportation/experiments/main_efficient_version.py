@@ -1444,209 +1444,67 @@ def activation_hook(name, activation_stats):
         activation_stats[name] = {'min': input_tensor.min().item(), 'max': input_tensor.max().item()}
     return hook
 
-# The function that calculates loss based on COB and runs inference
-def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None):    
-    teleported_model = copy.deepcopy(tm)  # Clone the model for each process
-    teleported_model = teleported_model.teleport(cob, reset_teleportation=False)
 
-    # Reset activation stats and run a forward pass
-    activation_stats = {}
-    hook_handles = []
-    for i, layer in enumerate(teleported_model.network.children()):
-        if isinstance(layer, (nn.ReLU, nn.Sigmoid, nn.GELU, nn.LeakyReLU, ReLUCOB, SigmoidCOB, GELUCOB, LeakyReLUCOB)):
-            handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats))
-            hook_handles.append(handle)
-
-    teleported_model.eval()
-    with torch.no_grad():
-        pred = teleported_model.network(input_data)
-
-    for handle in hook_handles:
-        handle.remove()
-
-    # Calculate the range loss
-    loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
-    loss /= original_loss
-
-    # Calculate the prediction error
-    pred = pred.detach().cpu().numpy()
-    pred_error = np.abs(original_pred - pred).mean()
-    pred_error /= np.abs(original_pred).mean()
-    total_loss = loss + 10 * pred_error
-
-    teleported_model.undo_teleportation()
-    return total_loss, loss, pred_error
-
-# Worker function to compute gradients in a batch
-def worker_func_batch(batch, key, base, params_dict, step_size, func):
+def compute_gradient_for_dimension_batch(cob, dim_indices, input_data, original_pred, original_loss, tm):
+    """Compute the gradient for a batch of dimensions."""
     results = []
-    param_copy = params_dict[key].clone()  # Clone once
-    for idx in batch:
-        param_copy[idx] += step_size  # Apply step size
-        loss, _, _ = func(param_copy)
-        grad = (loss - base) / step_size  # Finite difference gradient
-        results.append((idx, grad))
-    return results
-
-
-# Batched CGE with multiprocessing
-@torch.no_grad()
-def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, batch_size=50):
-    if base is None:
-        base, _, _ = func(params_dict["cob"])
-
-    grads_dict = {}
-    for key, param in params_dict.items():
-        mask_flat = torch.ones_like(param).flatten()
-        mask_flat *= torch.bernoulli(torch.full_like(mask_flat, 0.5))  # Mask with 50% probability
-
-        idx_list = mask_flat.nonzero().flatten().tolist()
-        batches = [idx_list[i:i + batch_size] for i in range(0, len(idx_list), batch_size)]
-
-        # Ensure that each task is a tuple of arguments
-        tasks = [(batch, key, base, params_dict, step_size, func) for batch in batches]
-
-        # Use starmap or imap_unordered to handle task execution with correct argument unpacking
-        results = pool.starmap(worker_func_batch, tasks)
-
-        directional_derivative_flat = torch.zeros_like(param).flatten()
-        for result_batch in results:
-            for idx, grad in result_batch:
-                directional_derivative_flat[idx] = grad
-                
-        grads_dict[key] = directional_derivative_flat.view_as(param)
-
-    return grads_dict
-
-
-
-
-import time
-# Training loop
-def train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args):
-    initial_cob_idx = torch.ones(960)  # Initial guess for COB
-
-    best_cob = None
-    best_loss = float('inf')
-    cor_best_pred_error = 0.0
-    cor_best_range = 0.0
-
-    ackley = functools.partial(
-        f_ack,
-        input_data=input_teleported_model,
-        original_pred=original_pred,
-        layer_idx=layer_idx,
-        original_loss=original_loss_idx,
-        tm=LN
-    )
-
-    with mp.Pool(processes=mp.cpu_count()) as pool:
-        for step in range(args.steps):
-            t0 = time.time()
-
-            grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, batch_size=mp.cpu_count())
-            t1 = time.time()
-
-            initial_cob_idx -= args.cob_lr * grad_cob["cob"]
-            t2 = time.time()
-
-            loss, r_error, p_error = ackley(initial_cob_idx)
-            t3 = time.time()
-
-            if loss < best_loss:
-                best_loss = loss
-                best_cob = initial_cob_idx.clone()
-                cor_best_pred_error = p_error
-                cor_best_range = r_error
-
-            print(f"Step: {step} \t Loss: {loss} \t Time: {t1-t0:.2f}s {t2-t1:.2f}s {t3-t2:.2f}s")
-
-    return best_cob, best_loss, cor_best_range, cor_best_pred_error
-
-
-
-
-def f_ack_parallel(cob, dim_indices, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None, step_size=0.01, base_loss=None):
-    """
-    Compute gradients for a subset of COB dimensions given by dim_indices.
-    Teleport the model with perturbed COB in each iteration.
-    """
-    teleported_model = copy.deepcopy(tm)  # Deep copy of the model to ensure each process has its own model
-    
-    gradients = torch.zeros_like(cob)  # Initialize gradient tensor
-    cob_flat = cob.flatten()
-
-    # Run inference and calculate the total loss with perturbed COB
-    activation_stats = {}
-    hook_handles = []
-    for i, layer in enumerate(teleported_model.network.children()):
-        if isinstance(layer, nn.ReLU) or isinstance(layer, nn.Sigmoid) or isinstance(layer, nn.GELU) or isinstance(layer, nn.LeakyReLU):
-            handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats))
-            hook_handles.append(handle)
-    teleported_model.eval()
-
-    if base_loss is None:
-        with torch.no_grad():
-            original_pred = teleported_model.network(input_data)
-            original_loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
-            original_loss /= original_loss
-            base_loss = original_loss
-
-    for idx in range(960):
-        # Teleport the model with the current COB (perturbing the current index)
-        cob_flat[idx] += step_size
-        teleported_model = teleported_model.teleport(cob, reset_teleportation=False)
+    for dim_index in dim_indices:
+        perturbed_cob = cob.clone()  # Clone COB to avoid modifying it
+        perturbed_cob[dim_index] += 0.01  # Perturb the current dimension
         
-        
+        # Deep copy of the model to avoid shared state issues
+        teleported_model = copy.deepcopy(tm)
+        teleported_model.teleport(perturbed_cob, reset_teleportation=False)
+
+        # Same logic as before for forward pass and loss calculation
+        activation_stats = {}
+        hook_handles = []
+
+        for i, layer in enumerate(teleported_model.network.children()):
+            if isinstance(layer, torch.nn.ReLU):
+                handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats))
+                hook_handles.append(handle)
+
+        teleported_model.eval()
         with torch.no_grad():
             pred = teleported_model.network(input_data)
         
         for handle in hook_handles:
             handle.remove()
 
-        # Compute the loss based on range and prediction error
-        loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
-        loss /= original_loss
-        pred_error = torch.abs(original_pred - pred).mean()
-        pred_error /= torch.abs(original_pred).mean()
+        # Compute range loss and prediction error
+        loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()]) / original_loss
+        pred_error = torch.abs(original_pred - pred).mean() / torch.abs(original_pred).mean()
         total_loss = loss + 10 * pred_error
 
-        # Compute gradient for the current index using the base loss
-        # print("total_loss:",total_loss, "\t base_loss:",base_loss)
-        gradients[idx] = (total_loss - base_loss) / step_size
-        
-        # Undo teleportation to reset model
-        teleported_model.undo_teleportation()
-        cob_flat[idx] -= step_size  # Revert the perturbation
+        teleported_model.undo_teleportation()  # Undo the teleportation
+
+        results.append(total_loss.cpu().numpy())
+
+    return results
+
+def parallel_gradient_computation(cob, input_data, original_pred, original_loss, tm, batch_size=64):
+    """Distribute gradient computation for all dimensions using multiprocessing."""
+    num_dims = cob.size(0)  # 960 dimensions
+    dim_indices = list(range(num_dims))
+
+    # Split dim_indices into batches
+    batches = [dim_indices[i:i + batch_size] for i in range(0, num_dims, batch_size)]
+
+    # Set up multiprocessing pool
+    with mp.Pool(mp.cpu_count()) as pool:
+        # Parallel execution
+        results = pool.starmap(
+            compute_gradient_for_dimension_batch,
+            [(cob, batch, input_data, original_pred, original_loss, tm) for batch in batches]
+        )
+
+    # Flatten the results
+    gradients = [grad for batch_results in results for grad in batch_results]
     
     return gradients
 
-# IMPORT POOL
-from multiprocessing import Pool
-def compute_gradients_in_batches(cob, num_processes, input_data, original_pred, layer_idx, original_loss, tm, step_size=0.01):
-    """
-    Parallelize gradient calculation for different COB dimensions using multiple processes.
-    """
-    num_dims = cob.numel()
-    batch_size = num_dims // num_processes
-    dim_indices = [list(range(i, min(i + batch_size, num_dims))) for i in range(0, num_dims, batch_size)]
 
-    # Precompute base loss once to avoid redundant computation
-    base_loss = original_loss
-
-    # Prepare arguments for each process
-    args = [(cob.clone(), indices, input_data, original_pred, layer_idx, original_loss, tm, step_size, base_loss) for indices in dim_indices]
-
-    # Use multiprocessing to parallelize the gradient computation
-    with Pool(processes=num_processes) as pool:
-        gradient_batches = pool.starmap(f_ack_parallel, args)
-
-    # Combine the results from each process
-    total_gradients = torch.zeros_like(cob)
-    for grad in gradient_batches:
-        total_gradients += grad
-
-    return total_gradients
 
 if __name__ == '__main__':
     import os
@@ -2007,10 +1865,29 @@ if __name__ == '__main__':
                         for step in range(args.steps):
                             print(f"Step: {step}")
                             # get the gradient of the cob
-                            grad_cob = compute_gradients_in_batches(initial_cob_idx, num_processes=4, input_data=input_teleported_model,
-                                            original_pred=original_pred, layer_idx=layer_idx, original_loss=original_loss_idx, tm=LN)
+                            params_dict = {
+                                "cob": initial_cob_idx,
+                                "input_data": input_teleported_model,
+                                "original_pred": original_pred,
+                                "layer_idx": layer_idx,
+                                "original_loss": original_loss_idx,
+                            }
+
+                            mask_dict = {}  # Assuming you have a mask dictionary if needed
+
+                            # Call the parallelized `cge_parallel` function
+                            grad_cob = parallel_gradient_computation(
+                                cob=initial_cob_idx, 
+                                input_data=input_teleported_model, 
+                                original_pred=original_pred, 
+                                original_loss=original_loss_idx, 
+                                tm=LN
+                            )
 
                             # update the cob
+                            grad_cob = np.array(grad_cob)
+                            grad_cob = torch.tensor(grad_cob)
+                            print("GRAD COB:",grad_cob)
                             initial_cob_idx -= args.cob_lr * grad_cob
                             # calculate the loss
                             # loss = ackley(initial_cob_idx)
