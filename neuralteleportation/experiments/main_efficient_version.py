@@ -1492,7 +1492,7 @@ def parallel_gradient_computation(cob, input_data, original_pred, original_loss,
     batches = [dim_indices[i:i + batch_size] for i in range(0, num_dims, batch_size)]
 
     # Set up multiprocessing pool
-    with mp.Pool(mp.cpu_count()) as pool:
+    with mp.Pool(min(10,mp.cpu_count())) as pool:
         # Parallel execution
         results = pool.starmap(
             compute_gradient_for_dimension_batch,

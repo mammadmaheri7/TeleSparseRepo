@@ -1946,7 +1946,7 @@ if __name__ == '__main__':
     list_of_no_teleportation = [1,3,4,5]
     # list_jpeg = ["ILSVRC2012_val_00000616.JPEG"]
     # list_jpeg is all jpeg file in the folder images
-    list_jpeg = os.listdir("/Users/mm6322/Phd research/nerual_transport/neuralteleportation/neuralteleportation/experiments/sparse-cap-acc-tmp/images")
+    list_jpeg = os.listdir("./sparse-cap-acc-tmp/images")
     list_jpeg = [x for x in list_jpeg if x.endswith(".JPEG")]
 
     # computing accuracy of the teleportation
@@ -1970,7 +1970,7 @@ if __name__ == '__main__':
             # for layer_idx in range(model.depth):
             # TODO: uncomment the line above and comment the line below
             for jpeg_path in list_jpeg:
-                img = Image.open(f"/Users/mm6322/Phd research/nerual_transport/neuralteleportation/neuralteleportation/experiments/sparse-cap-acc-tmp/images/{jpeg_path}")
+                img = Image.open(f"./sparse-cap-acc-tmp/images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
                 img = img.resize((224,224))
                 data = transforms.ToTensor()(img).unsqueeze(0)
