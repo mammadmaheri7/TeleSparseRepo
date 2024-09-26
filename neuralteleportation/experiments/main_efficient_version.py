@@ -1508,6 +1508,7 @@ def parallel_gradient_computation(cob, input_data, original_pred, original_loss,
 
 if __name__ == '__main__':
     import os
+    mp.set_start_method('spawn')
     # Disable GPUs by setting CUDA_VISIBLE_DEVICES to an empty string
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     args = get_default_args()
