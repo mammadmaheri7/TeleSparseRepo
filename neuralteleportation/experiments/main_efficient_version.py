@@ -1782,19 +1782,19 @@ if __name__ == '__main__':
 
 
     # Export the model
-    torch.onnx.export(    
-        model,               # model being run
-        x,                   # model input (or a tuple for multiple inputs)
-        args.prefix_dir + "network_complete.onnx",            # where to save the model (can be a file or file-like object)
-        export_params=True,        # store the trained parameter weights inside the model file
-        opset_version=15,          # the ONNX version to export the model to
-        do_constant_folding=True,  # whether to execute constant folding for optimization
-        input_names = ['input'],   # the model's input names
-        output_names = ['output'], # the model's output names
-        dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-                        'output': {0:'batch_size'},
-        },         
-    )
+    # torch.onnx.export(    
+    #     model,               # model being run
+    #     x,                   # model input (or a tuple for multiple inputs)
+    #     args.prefix_dir + "network_complete.onnx",            # where to save the model (can be a file or file-like object)
+    #     export_params=True,        # store the trained parameter weights inside the model file
+    #     opset_version=15,          # the ONNX version to export the model to
+    #     do_constant_folding=True,  # whether to execute constant folding for optimization
+    #     input_names = ['input'],   # the model's input names
+    #     output_names = ['output'], # the model's output names
+    #     dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+    #                     'output': {0:'batch_size'},
+    #     },         
+    # )
 
     inter_out = model.split_convs(data)
     print("layer_idx:\t","CONV","\t half:",str(False),"\t inter_out.shape:",inter_out.shape,"\t min:",inter_out.min(),"\t max:",inter_out.max())
@@ -1803,25 +1803,25 @@ if __name__ == '__main__':
             inter_out = model.split_n(data,layer_idx,half)
             print("layer_idx:\t",layer_idx,"\t half:",str(half),"\t inter_out.shape:",inter_out.shape,"\t min:",inter_out.min(),"\t max:",inter_out.max())
 
-    import onnx
-    on = onnx.load(args.prefix_dir + "network_complete.onnx")
-    for tensor in on.graph.input:
-        for dim_proto in tensor.type.tensor_type.shape.dim:
-            print("dim_proto:",dim_proto)
-            if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
-                dim_proto.Clear()
-                dim_proto.dim_value = BATCHS   # fixed batch size
-    for tensor in on.graph.output:
-        for dim_proto in tensor.type.tensor_type.shape.dim:
-            if dim_proto.HasField("dim_param"):
-                dim_proto.Clear()
-                dim_proto.dim_value = BATCHS   # fixed batch size
+    # import onnx
+    # on = onnx.load(args.prefix_dir + "network_complete.onnx")
+    # for tensor in on.graph.input:
+    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+    #         print("dim_proto:",dim_proto)
+    #         if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
+    #             dim_proto.Clear()
+    #             dim_proto.dim_value = BATCHS   # fixed batch size
+    # for tensor in on.graph.output:
+    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+    #         if dim_proto.HasField("dim_param"):
+    #             dim_proto.Clear()
+    #             dim_proto.dim_value = BATCHS   # fixed batch size
 
-    onnx.save(on, args.prefix_dir + "network_complete.onnx")
+    # onnx.save(on, args.prefix_dir + "network_complete.onnx")
 
-    on = onnx.load(args.prefix_dir + "network_complete.onnx")
-    on = onnx.shape_inference.infer_shapes(on)
-    onnx.save(on, args.prefix_dir + "network_complete.onnx")
+    # on = onnx.load(args.prefix_dir + "network_complete.onnx")
+    # on = onnx.shape_inference.infer_shapes(on)
+    # onnx.save(on, args.prefix_dir + "network_complete.onnx")
 
 
 
@@ -1841,7 +1841,7 @@ if __name__ == '__main__':
 
 
 
-    import onnx
+    # import onnx
     # extract all onnx files of layers
 
     input_path = args.prefix_dir + "network_complete.onnx"
@@ -1850,7 +1850,7 @@ if __name__ == '__main__':
     output_path = args.prefix_dir + "network_split_convs.onnx"
     input_names = ["input"]
     output_names = ["/Add_output_0"]
-    onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
+    # onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
     input_names = output_names
 
     for layer_idx in range(model.depth):
@@ -1867,7 +1867,7 @@ if __name__ == '__main__':
                     
             print("layer_idx:",layer_idx,"\t half:",str(half),"\t input_names:",input_names,"\t output_names:",output_names)
                     
-            onnx.utils.extract_model(input_path, output_path, input_names, output_names,check_model=True)
+            # onnx.utils.extract_model(input_path, output_path, input_names, output_names,check_model=True)
             input_names = output_names
 
 
@@ -2059,7 +2059,7 @@ if __name__ == '__main__':
                     new_model.blocks[layer_idx].norm2.load_state_dict(sd)
 
                     # Export the optimized model to ONNX
-                    torch.onnx.export(LN.network, input_teleported_model, args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.onnx', verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
+                    # torch.onnx.export(LN.network, input_teleported_model, args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.onnx', verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
 
                     # check the validation of the teleportation
                     # 1.extract onnx corrosponding to the teleported model (in original onnx)
@@ -2067,7 +2067,7 @@ if __name__ == '__main__':
                     output_path = args.prefix_dir + f"block{layer_idx}_cob_activation_norm.onnx"
                     input_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
                     output_names = [f"/blocks.{layer_idx}/mlp/fc2/Add_output_0"]
-                    onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
+                    # onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
                 
                     # write the results to the csv file
                     with open(csv_file_path, mode='a', newline='') as file:
