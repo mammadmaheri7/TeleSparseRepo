@@ -2093,9 +2093,10 @@ if __name__ == '__main__':
                 if new_pred.argmax() == result.argmax():
                     teleport_correct += 1
                 teleport_total += 1
+                norm1 = torch.norm(new_pred - result)
                 print("ACCURACY OF TELEPORTATION:", teleport_correct/teleport_total)
                 # log on the file txt (append the accuracy of teleportation + number of corrot and total)
                 with open(args.prefix_dir + "accuracy_teleportation.txt", "a") as f:
-                    f.write(f"ACCURACY OF TELEPORTATION: {teleport_correct/teleport_total} \t CORRECT: {teleport_correct} \t TOTAL: {teleport_total}\n")
+                    f.write(f"ACCURACY OF TELEPORTATION: {teleport_correct/teleport_total} \t CORRECT: {teleport_correct} \t TOTAL: {teleport_total} \t NORM1: {norm1}\n")
                 print("==========================")
                 time.sleep(2)
