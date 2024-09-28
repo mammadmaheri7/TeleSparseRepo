@@ -1494,10 +1494,6 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
         layer_loss = elementwise_product.sum()
         # Accumulate the total prediction error
         pred_error += layer_loss.item()
-        # print("debug - pred_error: ", pred_error)
-            # else:
-            #     print(f"Key {key} not found in activation_orig or grad_orig.") 
-
         if random.random() < 0.0005:
             print(f"debug - grad_squared_norm: {grad_squared.norm()} \t delta2_norm: {delta.pow(2).norm()} \t layer_loss: {layer_loss}")
     else:
@@ -1505,7 +1501,7 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
         pred_error /= np.abs(original_pred).mean()
         pred_error = pred_error.item()
     # TODO: change the 10 with args.pred_mul (adding that to the function signature)
-    total_loss = loss + 20 * pred_error
+    total_loss = loss + 5 * pred_error
 
     # if random.random() < 0.0005:
     #     print(f"pred_error: {pred_error} \t range_loss: {loss}")
@@ -1759,7 +1755,7 @@ if __name__ == '__main__':
     default_log_rows = 20
     default_num_cols = 2
     default_scale_rebase_multiplier = 1
-    defualt_hessian_sensitivity = True
+    defualt_hessian_sensitivity = False
 
     # parser = argparse.ArgumentParser(description='Process some integers.')
     # parser.add_argument('--model', default=default_model, type=str, help='Model type')
@@ -2102,7 +2098,7 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:
-                        args.pred_mul = 20
+                        args.pred_mul = 5
                         args.steps = 200
                         args.cob_lr = 0.2
                         args.zoo_step_size = 0.0005
