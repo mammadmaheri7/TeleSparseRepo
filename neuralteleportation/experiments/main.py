@@ -1877,7 +1877,7 @@ if __name__ == '__main__':
                 hook_handles.append(handle)
 
     result = model(data)
-    range_list_all = {i : activation_stats['relu_i'] for i in range(model.depth)}
+    range_list_all = {i : activation_stats[f'relu_{i}'] for i in range(model.depth)}
     print("range_list_all:",range_list_all)
 
     for handle in hook_handles:
