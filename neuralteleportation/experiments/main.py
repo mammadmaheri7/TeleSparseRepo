@@ -1303,7 +1303,7 @@ class VisionTransformer(nn.Module):
         x = x + self.pos_embed  
         x = self.pos_drop(x)
         
-        for layer_idx in range(n-1):
+        for layer_idx in range(n):
             x = self.blocks[layer_idx](x)
             
         #n-th layer
@@ -1866,27 +1866,9 @@ if __name__ == '__main__':
     print(data.shape)
     print("data shape:",data.shape)
 
-    # compute the range of the activations of the model (for all layers)
-    hook_handles = []
-    activation_stats = {}
-    for layer_idx, block in enumerate(model.blocks):
-        mlp = block.mlp
-        for layer in mlp.children():
-            if isinstance(layer, (nn.ReLU, nn.Sigmoid, nn.GELU, nn.LeakyReLU)):
-                handle = layer.register_forward_hook(activation_hook(f'relu_{layer_idx}', activation_stats=activation_stats, layer_idx=layer_idx))
-                hook_handles.append(handle)
-
+    # compute the output of the model
     result = model(data)
-    range_list_all = {i : abs(activation_stats[f'relu_{i}']['max']) - abs(activation_stats[f'relu_{i}']['min']) for i in range(model.depth)}
-    print("range_list_all:",range_list_all)
-
-    for handle in hook_handles:
-        handle.remove()
-
-    
-    # print(result.shape)
     network_input_data = copy.deepcopy(data)
-
 
     import json
     x = data.detach().clone()
@@ -2008,10 +1990,8 @@ if __name__ == '__main__':
     # list_of_no_teleportation = [1,3,4,5]
     if not args.hessian_sensitivity:
         # list_of_no_teleportation = [1,3,4,5]
-        # list_of_no_teleportation = []
+        list_of_no_teleportation = None
         # select the three least values of the range_list_all
-        top_k = 3
-        list_of_no_teleportation = [key for key in sorted(range_list_all, key=lambda k: range_list_all[k]['max'])[:top_k]]
     else:
         list_of_no_teleportation = []
     # list_jpeg = ["ILSVRC2012_val_00000616.JPEG"]
@@ -2036,15 +2016,16 @@ if __name__ == '__main__':
 
             # copy the model
             new_model = copy.deepcopy(model)
+            model.eval()
+            new_model.eval()
             
             # generate compression-model and setting for all vit layers
             # for layer_idx in range(model.depth):
             # TODO: uncomment the line above and comment the line below
-            tmp_first = True
+            # reverset the list_jpeg list
+            list_jpeg = list(reversed(list_jpeg))
+
             for jpeg_path in list_jpeg:
-                if tmp_first:
-                    tmp_first = False
-                    continue
                 img = Image.open(f"./sparse-cap-acc-tmp/images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
                 img = img.resize((224,224))
@@ -2107,8 +2088,30 @@ if __name__ == '__main__':
                     model.eval()
                 else:
                     with torch.no_grad():
+                        # compute the range of the activations of the model (for all layers)
+                        # 1. set the hooks
+                        hook_handles = []
+                        activation_stats_all = {}
+                        for layer_idx, block in enumerate(model.blocks):
+                            mlp = block.mlp
+                            for layer in mlp.children():
+                                if isinstance(layer, (nn.ReLU, nn.Sigmoid, nn.GELU, nn.LeakyReLU)):
+                                    handle = layer.register_forward_hook(activation_hook(f'relu_{layer_idx}', activation_stats=activation_stats_all, layer_idx=layer_idx))
+                                    hook_handles.append(handle)
+
                         # inference on original model
                         result = model(data)
+                        # 2. finding the range based on the hooks
+                        range_list_all = {i : activation_stats_all[f'relu_{i}']['max'] - activation_stats_all[f'relu_{i}']['min'] for i in range(model.depth)}
+                        # print("activation_stats_all:",activation_stats_all)
+                        print("range_list_all:",range_list_all)
+                        # 3. remove the hooks
+                        for handle in hook_handles:
+                            handle.remove()
+                        # 4. define list of no teleportation
+                        topk = 3
+                        list_of_no_teleportation = [k for k, v in sorted(range_list_all.items(), key=lambda item: item[1])[:topk]]
+                        print("list_of_no_teleportation:",list_of_no_teleportation)
                        
                 # inference on original model
                 network_input_data = copy.deepcopy(data)
@@ -2126,15 +2129,22 @@ if __name__ == '__main__':
                         args.zoo_step_size = 0.0005
 
                         # Hook for the intermediate output of the block
+                        hook_handles = []
                         original_mlp_idx = model.blocks[layer_idx].mlp
                         activation_stats_idx = {}
                         for i,layer in enumerate(original_mlp_idx.children()):
                             if isinstance(layer, nn.ReLU) or isinstance(layer, nn.Sigmoid) or isinstance(layer, nn.GELU) or isinstance(layer, nn.LeakyReLU):
-                                layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats_idx))
+                                handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats_idx))
+                                hook_handles.append(handle)
                         # run the mlp model to find original_loss
                         # create input_convs based on 
                         input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
                         original_block_idx_pred = model.split_n(torch.tensor(input_convs).view(BATCHS,3,224,224),layer_idx,half=False)
+                        # original_block_idx_pred = model(data)
+
+                        for handle in hook_handles:
+                            handle.remove()
+ 
                         # print activation stats
                         print(f"layer_idx: {layer_idx} , \t  activation_stats: {activation_stats_idx}")
                         original_loss_idx = sum([stats['max'] - stats['min'] for stats in activation_stats_idx.values()])
