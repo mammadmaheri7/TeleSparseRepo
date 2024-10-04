@@ -274,12 +274,20 @@ class ConvMixin(NeuronLayerMixin):
         super().__init__(*args, **kwargs)
         self.in_features = self.in_channels
         self.out_features = self.out_channels
+        self.groups = self.groups
 
 
 class Conv2dCOB(ConvMixin, nn.Conv2d):
 
     def _get_cob_weight_factor(self, prev_cob: torch.Tensor, next_cob: torch.Tensor) -> torch.Tensor:
-        return (next_cob[..., None] / prev_cob[None, ...])[..., None, None]
+        # return (next_cob[..., None] / prev_cob[None, ...])[..., None, None]
+        # Check if the convolution is depthwise (groups == in_channels)
+        if self.groups == self.in_channels:
+            # Depthwise convolution: match each input channel separately
+            return (next_cob[..., None] / prev_cob[..., None])[..., None, None]
+        else:
+            # Standard convolution or grouped convolution
+            return (next_cob[..., None] / prev_cob[None, ...])[..., None, None]
 
 
 class ConvTranspose2dCOB(ConvMixin, nn.ConvTranspose2d):
@@ -291,8 +299,8 @@ class ConvTranspose2dCOB(ConvMixin, nn.ConvTranspose2d):
 class BatchNormMixin(COBForwardMixin, NeuronLayerMixin):
     cob_field = 'prev_cob'
 
-    def __init__(self, num_features: int):
-        super().__init__(num_features)
+    def __init__(self, num_features: int, last_cob: bool = False):
+        super().__init__(num_features, last_cob)
         self.in_features = self.out_features = self.num_features
 
     def apply_cob(self, prev_cob: torch.Tensor, next_cob: torch.Tensor):
@@ -395,15 +403,18 @@ class BatchNormMixin(COBForwardMixin, NeuronLayerMixin):
 
 class BatchNorm2dCOB(BatchNormMixin, nn.BatchNorm2d):
     reshape_cob = True
+    last_cob = False
 
 
 class BatchNorm1dCOB(BatchNormMixin, nn.BatchNorm1d):
     reshape_cob = True
+    last_cob = False
 
 
 class LayerNormCOB(BatchNormMixin, nn.LayerNorm):
     reshape_cob = True
     num_features: int
+    last_cob = True
    
     # def _forward(self, input: torch.Tensor) -> torch.Tensor:
     #     return self.base_layer().forward(self, input / self.next_cob)
@@ -416,7 +427,7 @@ class LayerNormCOB(BatchNormMixin, nn.LayerNorm):
         self.out_features = num_features
         self.num_features = num_features
         # then call the parent constructor
-        BatchNormMixin.__init__(self, num_features)
+        BatchNormMixin.__init__(self, num_features, last_cob=True)
 
     def get_nb_params(self) -> int:
         """Get the number of parameters in the layer (weight and bias).
