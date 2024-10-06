@@ -404,6 +404,7 @@ class BatchNormMixin(COBForwardMixin, NeuronLayerMixin):
 class BatchNorm2dCOB(BatchNormMixin, nn.BatchNorm2d):
     reshape_cob = True
     last_cob = False
+    eps = 1e-5
 
 
 class BatchNorm1dCOB(BatchNormMixin, nn.BatchNorm1d):
