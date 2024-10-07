@@ -1729,22 +1729,6 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
         return best_cob, best_loss.value, cor_best_range.value, cor_best_pred_error.value
 
 
-# Example usage (assuming args, input data, and model are correctly set up)
-# args should include steps, cob_lr, zoo_step_size, pred_mul, and num_workers
-
-# # Example args setup
-# class Args:
-#     steps = 1000
-#     cob_lr = 0.01
-#     zoo_step_size = 1e-3
-#     pred_mul = 0.1
-#     num_workers = 4  # Number of workers for parallel processing
-
-# args = Args()
-
-# # Call the training function (assuming input_teleported_model, original_pred, etc. are defined)
-# best_cob = train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args)
-
 
 
 if __name__ == '__main__':
@@ -1825,14 +1809,9 @@ if __name__ == '__main__':
             model.load_state_dict(checkpoint['model'])
         else:
             model.load_state_dict(checkpoint)
-            
-    #     model.load_state_dict(checkpoint)
-    #     model.load_state_dict(checkpoint["state_dict"])
-        
     elif "deit" in args.model:
         checkpoint = torch.load(args.resume, map_location='cpu')
         model.load_state_dict(checkpoint["model"])
-
 
     # compute the number of zeros in the model / total number of parameters
     total_params = 0
@@ -1911,7 +1890,6 @@ if __name__ == '__main__':
                 dim_proto.dim_value = BATCHS   # fixed batch size
 
     onnx.save(on, args.prefix_dir + "network_complete.onnx")
-
     on = onnx.load(args.prefix_dir + "network_complete.onnx")
     on = onnx.shape_inference.infer_shapes(on)
     onnx.save(on, args.prefix_dir + "network_complete.onnx")
@@ -1956,7 +1934,6 @@ if __name__ == '__main__':
                     
             onnx.utils.extract_model(input_path, output_path, input_names, output_names,check_model=True)
             input_names = output_names
-
 
 
     # Define the CSV file and write the header if it doesn't exist
@@ -2019,10 +1996,7 @@ if __name__ == '__main__':
             model.eval()
             new_model.eval()
             
-            # generate compression-model and setting for all vit layers
-            # for layer_idx in range(model.depth):
-            # TODO: uncomment the line above and comment the line below
-            # reverset the list_jpeg list
+            # generate compression-model and setting for all images among all layers
             list_jpeg = list(reversed(list_jpeg))
 
             for jpeg_path in list_jpeg:
@@ -2101,13 +2075,15 @@ if __name__ == '__main__':
 
                         # inference on original model
                         result = model(data)
+
                         # 2. finding the range based on the hooks
                         range_list_all = {i : activation_stats_all[f'relu_{i}']['max'] - activation_stats_all[f'relu_{i}']['min'] for i in range(model.depth)}
-                        # print("activation_stats_all:",activation_stats_all)
                         print("range_list_all:",range_list_all)
+
                         # 3. remove the hooks
                         for handle in hook_handles:
                             handle.remove()
+                            
                         # 4. define list of no teleportation
                         topk = 3
                         list_of_no_teleportation = [k for k, v in sorted(range_list_all.items(), key=lambda item: item[1])[:topk]]
