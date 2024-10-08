@@ -54,7 +54,7 @@ def activation_hook(name, activation_stats, activations_output=None, layer_idx=N
     return hook
 
 # The function that calculates loss based on COB and runs inference
-def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None, activation_orig=None, grad_orig=None, hessian_sensitivity=False):    
+def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None, activation_orig=None, grad_orig=None, hessian_sensitivity=False, args=None):    
     # Set up model with the new COB
     teleported_model = tm
     # Apply the COB
@@ -78,7 +78,10 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
         handle.remove()
 
     # Calculate the range loss
-    loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
+    # loss = sum([stats['max'] - stats['min'] for stats in activation_stats.values()])
+    all_min = [stats['min'] for stats in activation_stats.values()]
+    all_max = [stats['max'] for stats in activation_stats.values()]
+    loss = max(all_max) - min(all_min)
     loss /= original_loss
     # Calculate the prediction error
     # pred_error = np.abs(original_pred - pred.detach().cpu().numpy()).mean()
@@ -107,7 +110,7 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
         pred_error /= np.abs(original_pred).mean()
         pred_error = pred_error.item()
     # TODO: change the 10 with args.pred_mul (adding that to the function signature)
-    total_loss = loss + 2.5 * pred_error
+    total_loss = loss + args.pred_mul * pred_error
 
     if random.random() < 0.001:
         print(f"pred_error: {pred_error} \t range_loss: {loss}")
@@ -193,7 +196,8 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
         tm=LN,
         activation_orig = activation_orig,
         grad_orig = grad_orig,
-        hessian_sensitivity = args.hessian_sensitivity
+        hessian_sensitivity = args.hessian_sensitivity,
+        args=args
     )
 
     eval_ackley = functools.partial(
@@ -203,7 +207,8 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
         layer_idx=layer_idx,
         original_loss=original_loss_idx,
         tm=LN,
-        hessian_sensitivity = args.hessian_sensitivity
+        hessian_sensitivity = args.hessian_sensitivity,
+        args=args
     )
 
     best_cob = None
@@ -235,6 +240,9 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
                     update = grad_cob["cob"] / grad_cob["cob"].norm()
                     initial_cob_idx -= args.cob_lr * update
                 t2 = time.time()
+
+                # check that all cob should be positive
+                initial_cob_idx = torch.clamp(initial_cob_idx, min=1e-5)
 
                 print("stats updated cob: min: ",initial_cob_idx.min().item()," max: ",initial_cob_idx.max().item())
 
@@ -507,6 +515,7 @@ if __name__ == '__main__':
             list_jpeg = list(reversed(list_jpeg))
 
             for jpeg_path in list_jpeg:
+                print("=== jpeg_path:",jpeg_path)
                 img = Image.open(args.prefix_dir + f"images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
                 img = img.resize((32,32))
@@ -586,6 +595,8 @@ if __name__ == '__main__':
                         # 2. finding the range based on the hooks
                         range_list_all = {key : activation_stats_all[key]['max'] - activation_stats_all[key]['min'] for key in activation_stats_all.keys()}
                         print("range_list_all:",range_list_all)
+                        print("min of all min:",min([stats['min'] for stats in activation_stats_all.values()]))
+                        print("max of all max:",max([stats['max'] for stats in activation_stats_all.values()]))
 
                         # 3. remove the hooks
                         for handle in hook_handles:
@@ -606,10 +617,11 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     # for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:
-                    args.pred_mul = 2.5
+                    args.pred_mul = 0
                     args.steps = 200
                     # args.cob_lr = 0.2
-                    args.cob_lr = 0.01
+                    # args.cob_lr = 0.01
+                    args.cob_lr = 0.02
                     args.zoo_step_size = 0.0005
 
                     # # Hook for the intermediate output of the block
@@ -634,7 +646,11 @@ if __name__ == '__main__':
                     # print(f"layer_idx: {layer_idx} , \t  activation_stats: {activation_stats_idx}")
                     # original_loss_idx = sum([stats['max'] - stats['min'] for stats in activation_stats_idx.values()])
                     # print("ORIGINAL LOSS:",original_loss_idx)
-                    original_loss_all_layers = sum([stats['max'] - stats['min'] for stats in activation_stats_all.values()])
+                    # original_loss_all_layers = sum([stats['max'] - stats['min'] for stats in activation_stats_all.values()])
+                    # max of all max - min of all min
+                    all_min = [stats['min'] for stats in activation_stats_all.values()]
+                    all_max = [stats['max'] for stats in activation_stats_all.values()]
+                    original_loss_all_layers = max(all_max) - min(all_min)
 
                     # track best loss
                     best_loss = 1e9
@@ -744,3 +760,4 @@ if __name__ == '__main__':
                         f.write(f"ACCURACY OF TELEPORTATION: {teleport_correct/teleport_total} \t CORRECT: {teleport_correct} \t TOTAL: {teleport_total} \t NORM1: {norm1}\n")
                     print("==========================")
                     time.sleep(2)
+                    break
