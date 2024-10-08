@@ -63,10 +63,10 @@ class BlockCOB(nn.Module):
         super(BlockCOB, self).__init__()
         self.conv1 = Conv2dCOB(in_planes, in_planes, kernel_size=3, stride=stride, padding=1, groups=in_planes, bias=False)
         self.bn1 = BatchNorm2dCOB(in_planes)
-        self.relu1 = ReLUCOB(inplace=True)
+        self.relu1 = ReLUCOB(inplace=False)
         self.conv2 = Conv2dCOB(in_planes, out_planes, kernel_size=1, stride=1, padding=0, bias=False)
         self.bn2 = BatchNorm2dCOB(out_planes)
-        self.relu2 = ReLUCOB(inplace=True)
+        self.relu2 = ReLUCOB(inplace=False)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -89,7 +89,7 @@ class MobileNetV1COB(nn.Module):
         # define the layers
         self.conv1 = Conv2dCOB(3, first_channel, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = BatchNorm2dCOB(first_channel)
-        self.relu1 = ReLUCOB(inplace=True)
+        self.relu1 = ReLUCOB(inplace=False)
 
         layers = self._make_layers(in_planes=first_channel, cfg=self.cfg[1:])
 
@@ -427,6 +427,10 @@ if __name__ == '__main__':
     # cob_bn1.eps = pretrained_bn1.eps
     out_pretrained = pretrained_bn1(out_pretrained)
     out_cob = cob_bn1(out_cob)
+    # do relu
+    out_pretrained = F.relu(out_pretrained)
+    out_cob = mobilenet_cob.relu1(out_cob)
+    print("MIN BN1: ", torch.min(out_pretrained).item(), torch.min(out_cob).item())
     print("DIFF_BN1: ", torch.mean(torch.abs(out_pretrained - out_cob)).item())
     pretrained_layer0_conv1 = pretrained_sparse_model.layers[0].conv1
     cob_layer0_conv1 = mobilenet_cob.layer0_conv1

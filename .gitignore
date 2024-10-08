@@ -165,3 +165,5 @@ neuralteleportation_env/
 neuralteleportation/experiments/.DS_Store
 neuralteleportation/experiments/figure.png
 neuralteleportation/experiments/sparse-cap-acc-tmp/images/
+neuralteleportation/experiments/data/
+neuralteleportation/experiments/mobilenetv1_teleport_ZO_temp
