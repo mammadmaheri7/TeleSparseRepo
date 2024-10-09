@@ -38,7 +38,7 @@ class NeuralTeleportationModel(nn.Module):
     def forward(self, x):
         return self.network(x)
 
-    def get_cob_size(self) -> int:
+    def get_cob_size(self,return_index_conv2d = False) -> int:
         """
             Get size of network's change of basis without input and output.
 
@@ -47,8 +47,15 @@ class NeuralTeleportationModel(nn.Module):
         """
         size = 0
         neuron_layers = self.get_neuron_layers()
+        if return_index_conv2d:
+            index_conv2d = []
         for i in range(len(neuron_layers) - 1):
             size += neuron_layers[i].out_features
+            if return_index_conv2d and isinstance(neuron_layers[i], nn.Conv2d):
+                index_conv2d.append([t for t in range(size - neuron_layers[i].out_features, size)])
+        
+        if return_index_conv2d:
+            return size, index_conv2d
         return size
 
     def initialize_cob(self) -> None:

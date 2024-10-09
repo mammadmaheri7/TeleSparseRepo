@@ -138,7 +138,7 @@ def worker_func_batch(args):
 
 # Batched CGE using multiprocessing
 @torch.no_grad()
-def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, num_process=4):
+def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, num_process=4, ignoring_indices=None):
     if base is None:
         base,_,_ = func(params_dict["cob"])
 
@@ -153,8 +153,16 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, num_pr
         directional_derivative = torch.zeros_like(param)
         directional_derivative_flat = directional_derivative.flatten()
 
-        # set 50 percent of the mask to zero
-        mask_flat = mask_flat * torch.bernoulli(torch.full_like(mask_flat, 0.5))
+        # check if ignoring_indices is not None
+        if ignoring_indices is not None:
+            mask_flat[ignoring_indices] = 0
+
+        # set 50 percent of the non-zero mask to zero
+        non_zero_mask = (mask_flat != 0).float()
+        dropout_mask = torch.bernoulli(non_zero_mask * 0.9)
+        mask_flat = mask_flat * dropout_mask
+        # mask_flat = mask_flat * torch.bernoulli(torch.full_like(mask_flat, 0.5))
+
 
         # Prepare batches of indices
         idx_list = mask_flat.nonzero().flatten().tolist()
@@ -184,7 +192,10 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, num_pr
 # Training loop using the persistent pool
 def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig = None, grad_orig = None):
     # initial_cob_idx = torch.ones(960)  # Initial guess for COB
-    initial_cob_idx = torch.ones(LN.get_cob_size())  # Initial guess for COB
+    cob_size, index_conv2d = LN.get_cob_size(return_index_conv2d=True)
+    # flatten the index_conv2d
+    index_conv2d = [item for sublist in index_conv2d for item in sublist]
+    initial_cob_idx = torch.ones(cob_size)  # Initial guess for COB
 
     # Prepare the function for constrained gradient estimation
     ackley = functools.partial(
@@ -230,7 +241,10 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
             for step in range(args.steps):
                 # Get the gradient of the COB using the batched CGE with persistent pool
                 t0 = time.time()
-                grad_cob = cge_batched(ackley, {"cob": initial_cob_idx}, None, args.zoo_step_size, pool, num_process=num_process)
+                grad_cob = cge_batched(ackley, 
+                                       {"cob": initial_cob_idx}, 
+                                       None, args.zoo_step_size, pool, num_process=num_process,
+                                       ignoring_indices=index_conv2d)
                 t1 = time.time()
                 # Update the COB using gradient descent
                 if not args.hessian_sensitivity:
@@ -337,13 +351,18 @@ if __name__ == '__main__':
                     retrieved_cfg.append((sub_module.conv2.out_channels, sub_module.conv1.stride[0]))
     print("retrieved_cfg: ",retrieved_cfg)
     mobilenet_cob = MobileNetV1COB(num_classes=10, cfg=retrieved_cfg)
+    print("mobilenet_cob: ",mobilenet_cob)
     # loading pretrained weights
     sparse_state_dict = pretrained_sparse_model.state_dict()
     new_sparse_state_dict = adjust_state_dict_keys(sparse_state_dict)
     mobilenet_cob.load_state_dict(new_sparse_state_dict, strict=True)
     model = mobilenet_cob
     model.eval()
+    print("model - after eval: ",model)
+    print("pretrained_sparse_model - before eval: ",pretrained_sparse_model)
     pretrained_sparse_model.eval()
+    print("pretrained_sparse_model - after eval: ",pretrained_sparse_model)
+
 
     # set eps to 1e-5
     model.bn1.eps=1e-5
@@ -402,6 +421,39 @@ if __name__ == '__main__':
         },         
     )
 
+    # LN = NeuralTeleportationModel(network = model, input_shape=(1, 3, 32, 32))
+    # # LN = LN.teleport(torch.ones(LN.get_cob_size()), reset_teleportation=True)
+    # # 
+    # cob_size, index_conv2d = LN.get_cob_size(return_index_conv2d=True)
+    # # make index_conv2d flat (instead of list of list to list)
+    # index_conv2d = [item for sublist in index_conv2d for item in sublist]
+    # random_teleportation = torch.rand(cob_size, dtype=torch.float32) * 0.1
+    # # set element corosponding to the index_conv2d to 1
+    # random_teleportation[index_conv2d] = 1
+    # LN = LN.teleport(random_teleportation, reset_teleportation=True)
+    # torch.onnx.export(LN.network, x, args.prefix_dir + f'mobilenetv1_cob_activation_norm_teleported.onnx', verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'],
+    # dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+    #                     'output': {0:'batch_size'},
+    #     },   
+    # )
+    # # making the mobilenetv1_cob_activation_norm_teleported.onnx fixed batch size
+    # on = onnx.load(args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+    # for tensor in on.graph.input:
+    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+    #         if dim_proto.HasField("dim_param"):
+    #             dim_proto.Clear()
+    #             dim_proto.dim_value = BATCHS
+    # for tensor in on.graph.output:
+    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+    #         if dim_proto.HasField("dim_param"):
+    #             dim_proto.Clear()
+    #             dim_proto.dim_value = BATCHS
+    # onnx.save(on, args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+    # on = onnx.load(args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+    # on = onnx.shape_inference.infer_shapes(on)
+    # onnx.save(on, args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+
+    # makin the network_complete.onnx fixed batch size
     on = onnx.load(args.prefix_dir + "network_complete.onnx")
     for tensor in on.graph.input:
         for dim_proto in tensor.type.tensor_type.shape.dim:
@@ -419,6 +471,38 @@ if __name__ == '__main__':
     on = onnx.load(args.prefix_dir + "network_complete.onnx")
     on = onnx.shape_inference.infer_shapes(on)
     onnx.save(on, args.prefix_dir + "network_complete.onnx")
+
+
+    # # save onnx of sparse_pretrained model
+    # torch.onnx.export(    
+    #     pretrained_sparse_model,               # model being run
+    #     x,                   # model input (or a tuple for multiple inputs)
+    #     args.prefix_dir + "pretrained_sparse_model.onnx",            # where to save the model (can be a file or file-like object)
+    #     export_params=True,        # store the trained parameter weights inside the model file
+    #     opset_version=15,          # the ONNX version to export the model to
+    #     do_constant_folding=True,  # whether to execute constant folding for optimization
+    #     input_names = ['input'],   # the model's input names
+    #     output_names = ['output'], # the model's output names
+    #     dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+    #                     'output': {0:'batch_size'},
+    #     },         
+    # )
+    # # making the pretrained_sparse_model.onnx fixed batch size
+    # on = onnx.load(args.prefix_dir + "pretrained_sparse_model.onnx")
+    # for tensor in on.graph.input:
+    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+    #         if dim_proto.HasField("dim_param"):
+    #             dim_proto.Clear()
+    #             dim_proto.dim_value = BATCHS
+    # for tensor in on.graph.output:
+    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+    #         if dim_proto.HasField("dim_param"):
+    #             dim_proto.Clear()
+    #             dim_proto.dim_value = BATCHS
+    # onnx.save(on, args.prefix_dir + "pretrained_sparse_model.onnx")
+    # on = onnx.load(args.prefix_dir + "pretrained_sparse_model.onnx")
+    # on = onnx.shape_inference.infer_shapes(on)
+    # onnx.save(on, args.prefix_dir + "pretrained_sparse_model.onnx")
 
     # generate data for all layers
     data_path = os.path.join(os.getcwd(),args.prefix_dir, "input_convs.json")
@@ -507,9 +591,9 @@ if __name__ == '__main__':
             print(f"input_param_scale: {input_param_scale}, num_cols: {num_cols}, max_log_rows: {max_log_rows}, param_visibility: {param_visibility}, lookup_margin: {lookup_margin}")
 
             # copy the model
-            new_model = copy.deepcopy(model)
+            # new_model = copy.deepcopy(model)
             model.eval()
-            new_model.eval()
+            # new_model.eval()
             
             # generate compression-model and setting for all images among all layers
             list_jpeg = list(reversed(list_jpeg))
@@ -618,10 +702,11 @@ if __name__ == '__main__':
                 with torch.no_grad():
                     # for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:
                     args.pred_mul = 0
-                    args.steps = 200
+                    args.steps = 50
                     # args.cob_lr = 0.2
                     # args.cob_lr = 0.01
-                    args.cob_lr = 0.02
+                    # args.cob_lr = 0.02
+                    args.cob_lr = 0.05
                     args.zoo_step_size = 0.0005
 
                     # # Hook for the intermediate output of the block
@@ -723,7 +808,29 @@ if __name__ == '__main__':
                     # new_model.blocks[layer_idx].norm2.load_state_dict(sd)
 
                     # Export the optimized model to ONNX
-                    torch.onnx.export(LN.network, data, args.prefix_dir + f'mobilenetv1_cob_activation_norm_teleported.onnx', verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
+                    torch.onnx.export(LN.network, data, args.prefix_dir + f'mobilenetv1_cob_activation_norm_teleported.onnx', verbose=False, 
+                                      export_params=True, opset_version=15, do_constant_folding=True, 
+                                      input_names=['input_0'], output_names=['output'],
+                                      dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                                    'output': {0:'batch_size'}},
+                                      )
+                    # # making the mobilenetv1_cob_activation_norm_teleported.onnx fixed batch size
+                    on = onnx.load(args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+                    for tensor in on.graph.input:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"):
+                                dim_proto.Clear()
+                                dim_proto.dim_value = BATCHS
+                    for tensor in on.graph.output:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"):
+                                dim_proto.Clear()
+                                dim_proto.dim_value = BATCHS
+                    onnx.save(on, args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+                    on = onnx.load(args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+                    on = onnx.shape_inference.infer_shapes(on)
+                    onnx.save(on, args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
+
 
                     # check the validation of the teleportation
                     # 1.extract onnx corrosponding to the teleported model (in original onnx)
