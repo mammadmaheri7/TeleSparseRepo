@@ -421,38 +421,6 @@ if __name__ == '__main__':
         },         
     )
 
-    # LN = NeuralTeleportationModel(network = model, input_shape=(1, 3, 32, 32))
-    # # LN = LN.teleport(torch.ones(LN.get_cob_size()), reset_teleportation=True)
-    # # 
-    # cob_size, index_conv2d = LN.get_cob_size(return_index_conv2d=True)
-    # # make index_conv2d flat (instead of list of list to list)
-    # index_conv2d = [item for sublist in index_conv2d for item in sublist]
-    # random_teleportation = torch.rand(cob_size, dtype=torch.float32) * 0.1
-    # # set element corosponding to the index_conv2d to 1
-    # random_teleportation[index_conv2d] = 1
-    # LN = LN.teleport(random_teleportation, reset_teleportation=True)
-    # torch.onnx.export(LN.network, x, args.prefix_dir + f'mobilenetv1_cob_activation_norm_teleported.onnx', verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'],
-    # dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-    #                     'output': {0:'batch_size'},
-    #     },   
-    # )
-    # # making the mobilenetv1_cob_activation_norm_teleported.onnx fixed batch size
-    # on = onnx.load(args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
-    # for tensor in on.graph.input:
-    #     for dim_proto in tensor.type.tensor_type.shape.dim:
-    #         if dim_proto.HasField("dim_param"):
-    #             dim_proto.Clear()
-    #             dim_proto.dim_value = BATCHS
-    # for tensor in on.graph.output:
-    #     for dim_proto in tensor.type.tensor_type.shape.dim:
-    #         if dim_proto.HasField("dim_param"):
-    #             dim_proto.Clear()
-    #             dim_proto.dim_value = BATCHS
-    # onnx.save(on, args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
-    # on = onnx.load(args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
-    # on = onnx.shape_inference.infer_shapes(on)
-    # onnx.save(on, args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
-
     # makin the network_complete.onnx fixed batch size
     on = onnx.load(args.prefix_dir + "network_complete.onnx")
     for tensor in on.graph.input:
@@ -471,38 +439,6 @@ if __name__ == '__main__':
     on = onnx.load(args.prefix_dir + "network_complete.onnx")
     on = onnx.shape_inference.infer_shapes(on)
     onnx.save(on, args.prefix_dir + "network_complete.onnx")
-
-
-    # # save onnx of sparse_pretrained model
-    # torch.onnx.export(    
-    #     pretrained_sparse_model,               # model being run
-    #     x,                   # model input (or a tuple for multiple inputs)
-    #     args.prefix_dir + "pretrained_sparse_model.onnx",            # where to save the model (can be a file or file-like object)
-    #     export_params=True,        # store the trained parameter weights inside the model file
-    #     opset_version=15,          # the ONNX version to export the model to
-    #     do_constant_folding=True,  # whether to execute constant folding for optimization
-    #     input_names = ['input'],   # the model's input names
-    #     output_names = ['output'], # the model's output names
-    #     dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-    #                     'output': {0:'batch_size'},
-    #     },         
-    # )
-    # # making the pretrained_sparse_model.onnx fixed batch size
-    # on = onnx.load(args.prefix_dir + "pretrained_sparse_model.onnx")
-    # for tensor in on.graph.input:
-    #     for dim_proto in tensor.type.tensor_type.shape.dim:
-    #         if dim_proto.HasField("dim_param"):
-    #             dim_proto.Clear()
-    #             dim_proto.dim_value = BATCHS
-    # for tensor in on.graph.output:
-    #     for dim_proto in tensor.type.tensor_type.shape.dim:
-    #         if dim_proto.HasField("dim_param"):
-    #             dim_proto.Clear()
-    #             dim_proto.dim_value = BATCHS
-    # onnx.save(on, args.prefix_dir + "pretrained_sparse_model.onnx")
-    # on = onnx.load(args.prefix_dir + "pretrained_sparse_model.onnx")
-    # on = onnx.shape_inference.infer_shapes(on)
-    # onnx.save(on, args.prefix_dir + "pretrained_sparse_model.onnx")
 
     # generate data for all layers
     data_path = os.path.join(os.getcwd(),args.prefix_dir, "input_convs.json")
@@ -591,9 +527,7 @@ if __name__ == '__main__':
             print(f"input_param_scale: {input_param_scale}, num_cols: {num_cols}, max_log_rows: {max_log_rows}, param_visibility: {param_visibility}, lookup_margin: {lookup_margin}")
 
             # copy the model
-            # new_model = copy.deepcopy(model)
             model.eval()
-            # new_model.eval()
             
             # generate compression-model and setting for all images among all layers
             list_jpeg = list(reversed(list_jpeg))
@@ -700,38 +634,11 @@ if __name__ == '__main__':
                 json.dump( data_dict, open(data_path, 'w' ))
 
                 with torch.no_grad():
-                    # for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:
                     args.pred_mul = 0
                     args.steps = 50
-                    # args.cob_lr = 0.2
-                    # args.cob_lr = 0.01
-                    # args.cob_lr = 0.02
                     args.cob_lr = 0.05
                     args.zoo_step_size = 0.0005
 
-                    # # Hook for the intermediate output of the block
-                    # hook_handles = []
-                    # original_mlp_idx = model.blocks[layer_idx].mlp
-                    # activation_stats_idx = {}
-                    # for i,layer in enumerate(original_mlp_idx.children()):
-                    #     if isinstance(layer, nn.ReLU) or isinstance(layer, nn.Sigmoid) or isinstance(layer, nn.GELU) or isinstance(layer, nn.LeakyReLU):
-                    #         handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats_idx))
-                    #         hook_handles.append(handle)
-                            
-                    # run the mlp model to find original_loss
-                    # create input_convs based on 
-                    # input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
-                    # original_block_idx_pred = model.split_n(torch.tensor(input_convs).view(BATCHS,3,224,224),layer_idx,half=False)
-                    # original_block_idx_pred = model(data)
-
-                    # for handle in hook_handles:
-                        # handle.remove()
-
-                    # print activation stats
-                    # print(f"layer_idx: {layer_idx} , \t  activation_stats: {activation_stats_idx}")
-                    # original_loss_idx = sum([stats['max'] - stats['min'] for stats in activation_stats_idx.values()])
-                    # print("ORIGINAL LOSS:",original_loss_idx)
-                    # original_loss_all_layers = sum([stats['max'] - stats['min'] for stats in activation_stats_all.values()])
                     # max of all max - min of all min
                     all_min = [stats['min'] for stats in activation_stats_all.values()]
                     all_max = [stats['max'] for stats in activation_stats_all.values()]
@@ -742,70 +649,23 @@ if __name__ == '__main__':
                     cor_best_pred_error = 1e9
                     cor_best_range = 1e9
 
-                    # define input_teleported_model (used in ng_loss_function)
-                    # input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
-                    # input_convs = torch.tensor(input_convs).view(1,3,224,224)
-                    # input_teleported_model = new_model.split_n(input_convs,layer_idx,half=True)
-                    # save npy file using in python checking script
-                    # np.save(args.prefix_dir + f"input_teleported_model_{layer_idx}.npy", input_teleported_model.detach().numpy())
-                    # define original_pred (used in ng_loss_function)
-                    # input_org = model.split_n(input_convs,layer_idx,half=True)
-                    # np.save(args.prefix_dir + f"input_org_{layer_idx}.npy", input_org.detach().numpy())
-                    # original_pred = model.blocks[layer_idx].mlp(model.blocks[layer_idx].norm2(input_org))
                     model.eval()
                     original_pred = model(network_input_data)
 
                     # Apply best COB and save model weights
-                    # LN = LinearNet()
                     LN = NeuralTeleportationModel(network = model, input_shape=(1, 3, 32, 32))
                     cob_size = LN.get_cob_size()
                     print("========= COB SIZE: ==========",cob_size)
                     LN.eval()
 
-                    # # TEST TELEPROTAION WORKS FINE
-                    # range_cob = 0.9
-                    # teleport_vector = torch.rand(cob_size, dtype=torch.float32) * (2 * range_cob) - range_cob + 1
-                    # LN = LN.teleport(teleport_vector, reset_teleportation=True)
-                    # # LN = LN.random_teleport(cob_range=0.8, reset_teleportation=True)
-                    # pred_LN = LN.network(network_input_data)
-                    # diff = (pred_LN - original_pred).abs()
-                    # print("diff stats - mean: ",diff.mean().item(), " max: ",diff.max().item())
-                    # assert diff.max() < 1e-5
-
-
-                    # load_ln_weights(LN, model, layer_idx)
-
-                    # if layer_idx in list_of_no_teleportation:
-                    #     print("====== NO OPTIMIZATION SINCE NO TELEPORTATION =====")
-                    #     best_loss = torch.tensor(best_loss).detach().cpu()
-                    #     LN = LN.teleport(torch.ones_like(torch.ones(960)), reset_teleportation=True)
-                    #     torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
-                    #     cor_best_range = 1
-                    #     cor_best_pred_error = 0
-                    # check whether the teleportation .pth already exists
-                    # elif os.path.exists(args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth'):
-                    #     print(f"block{layer_idx}_cob_activation_norm_teleported.pth already exists.")
-                    #     LN.network.load_state_dict(torch.load(args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth'))
-                    #     best_loss = torch.tensor(best_loss).detach().cpu()
-                    # else:
                     act_idx = activations_orig[layer_idx] if activations_orig is not None else None
                     grad_idx = gradients_orig[layer_idx] if gradients_orig is not None else None
-                    # best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig=act_idx, grad_orig=grad_idx)
-                    # change the input of the train_cob to input_orig in order to run the all blocks teleportation in parallel
-                    # best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, input_org, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig=act_idx, grad_orig=grad_idx)
+
                     best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(data, data, original_pred, 0, original_loss_all_layers, LN, args, activation_orig=act_idx, grad_orig=grad_idx)
                     print("BEST LOSS:",best_loss)
                     LN = LN.teleport(best_cob, reset_teleportation=True)
                     # save the .pth of the teleported model
-                    # torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
                     torch.save(LN.network.state_dict(), args.prefix_dir + f'mobilenetv1_cob_activation_norm_teleported.pth')
-                    # Apply the teleportation to the new_model (Using for computing the next layer inputs)
-                    # sd = LN.network.state_dict()
-                    # sd = {k: v for k, v in sd.items() if 'norm2' not in k}
-                    # new_model.blocks[layer_idx].mlp.load_state_dict(sd)
-                    # sd = LN.network.state_dict()
-                    # sd = {k.replace('norm2.',''): v for k, v in sd.items() if 'norm2' in k}
-                    # new_model.blocks[layer_idx].norm2.load_state_dict(sd)
 
                     # Export the optimized model to ONNX
                     torch.onnx.export(LN.network, data, args.prefix_dir + f'mobilenetv1_cob_activation_norm_teleported.onnx', verbose=False, 
@@ -830,7 +690,6 @@ if __name__ == '__main__':
                     on = onnx.load(args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
                     on = onnx.shape_inference.infer_shapes(on)
                     onnx.save(on, args.prefix_dir + "mobilenetv1_cob_activation_norm_teleported.onnx")
-
 
                     # check the validation of the teleportation
                     # 1.extract onnx corrosponding to the teleported model (in original onnx)
