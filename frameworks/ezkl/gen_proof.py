@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 import ezkl
 import json
 import numpy as np
@@ -22,22 +23,36 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
     # run_args.param_visibility = "fixed"
     run_args.param_visibility = "fixed"
     run_args.output_visibility = "public"
+    run_args.num_inner_cols = 2
+    run_args.variables = [("batch_size", 1)]
+    run_args.input_scale = 12
+    run_args.param_scale = 12
+    run_args.scale_rebase_multiplier = 1
+    lsm = 8
+    max_log_rows = 18
 
     print("Generating settings")
     try:
-        res = ezkl.gen_settings(model_path, settings_path, py_run_args=run_args)
+        # res = ezkl.gen_settings(model_path, settings_path, py_run_args=run_args)
+        command = f'ezkl gen-settings --model {model_path} --settings-path {settings_path} \
+            --input-scale {run_args.input_scale} --param-scale {run_args.param_scale} --scale-rebase-multiplier {run_args.scale_rebase_multiplier} \
+            --num-inner-cols {run_args.num_inner_cols} --input-visibility {run_args.input_visibility} --output-visibility {run_args.output_visibility} --param-visibility {run_args.param_visibility}'
+        os.system(command)
     except Exception as e:
         print(f"Error: {e}")
         exit(1)
-    assert res == True
+    # assert res == True
 
     print("Calibrating settings")
     try:
-        res = await ezkl.calibrate_settings(data_path, model_path, settings_path, mode, scales=[2,5,7,10], lookup_safety_margin=1)
+        # res = await ezkl.calibrate_settings(data_path, model_path, settings_path, mode, scales=[run_args.input_scale], lookup_safety_margin=lsm)
+        command = f'ezkl calibrate-settings --data "{data_path}" --model "{model_path}" --settings-path "{settings_path}" --target {mode} --scales {run_args.input_scale} \
+                --scale-rebase-multiplier {run_args.scale_rebase_multiplier} --lookup-safety-margin {lsm} --max-logrows {max_log_rows}'
+        os.system(command)
     except Exception as e:
         print(f"Error: {e}")
         exit(1)
-    assert res == True
+    # assert res == True
 
     # print all settings file content
     with open(settings_path, "r") as f:
@@ -98,13 +113,11 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
 
     # Generate the proof
     print("Generating proof")
-    # proof = ezkl.prove(
-    #         witness_path,
-    #         compiled_model_path,
-    #         pk_path,
-    #         proof_path,
-    #         "single",
-    #     )
+    # remove cache file to have fair comparison.
+    cache_dir = os.path.expanduser("~/.ezkl/cache")
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir)
+
     command = f"ezkl prove --witness {witness_path} --compiled-circuit {compiled_model_path} --pk-path {pk_path} --proof-path {proof_path}"
     os.system(command)    
     #print(proof)
