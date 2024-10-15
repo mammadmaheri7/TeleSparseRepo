@@ -622,29 +622,64 @@ if __name__ == '__main__':
                     # save the .pth of the teleported model
                     torch.save(LN.network.state_dict(), args.prefix_dir + f'resnet20_cob_activation_norm_teleported.pth')
 
+                    LN.eval()
+                    LN.network.eval()
+                    export_model = LN.network.eval().cpu()
+                    dummy_input = torch.randn(1, 3, 32, 32)
                     # Export the optimized model to ONNX
-                    torch.onnx.export(LN.network, data, args.prefix_dir + f'resnet20_cob_activation_norm_teleported.onnx', verbose=False, 
-                                      export_params=True, opset_version=15, do_constant_folding=True, 
-                                      input_names=['input_0'], output_names=['output'],
-                                      dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-                                                    'output': {0:'batch_size'}},
-                                      )
+                    onnx_path = args.prefix_dir + f"resnet20_cob_activation_norm_teleported.onnx"
+                    torch.onnx.export(    
+                        model,               # model being run
+                        dummy_input,                   # model input (or a tuple for multiple inputs)
+                        onnx_path,            # where to save the model (can be a file or file-like object)
+                        export_params=True,        # store the trained parameter weights inside the model file
+                        opset_version=15,          # the ONNX version to export the model to
+                        do_constant_folding=True,  # whether to execute constant folding for optimization
+                        input_names = ['input'],   # the model's input names
+                        output_names = ['output'], # the model's output names
+                        dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                        'output': {0:'batch_size'},
+                        },         
+                    )
                     # # making the resnet20_cob_activation_norm_teleported.onnx fixed batch size
-                    on = onnx.load(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+                    # on = onnx.load(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+                    # for tensor in on.graph.input:
+                    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+                    #         if dim_proto.HasField("dim_param"):
+                    #             dim_proto.Clear()
+                    #             dim_proto.dim_value = BATCHS
+                    # for tensor in on.graph.output:
+                    #     for dim_proto in tensor.type.tensor_type.shape.dim:
+                    #         if dim_proto.HasField("dim_param"):
+                    #             dim_proto.Clear()
+                    #             dim_proto.dim_value = BATCHS
+                    # onnx.save(on, args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+                    # on = onnx.load(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+                    # on = onnx.shape_inference.infer_shapes(on)
+                    # onnx.save(on, args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+                    # # check the validation of the teleportation
+                    # onnx.checker.check_model(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+
+                    BATCHS = 1
+                    on = onnx.load(onnx_path)
                     for tensor in on.graph.input:
                         for dim_proto in tensor.type.tensor_type.shape.dim:
-                            if dim_proto.HasField("dim_param"):
+                            print("dim_proto:",dim_proto)
+                            if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
                                 dim_proto.Clear()
-                                dim_proto.dim_value = BATCHS
+                                dim_proto.dim_value = BATCHS   # fixed batch size
                     for tensor in on.graph.output:
                         for dim_proto in tensor.type.tensor_type.shape.dim:
                             if dim_proto.HasField("dim_param"):
                                 dim_proto.Clear()
-                                dim_proto.dim_value = BATCHS
-                    onnx.save(on, args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
-                    on = onnx.load(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+                                dim_proto.dim_value = BATCHS   # fixed batch size
+
+                    onnx.save(on, onnx_path)
+                    on = onnx.load(onnx_path)
                     on = onnx.shape_inference.infer_shapes(on)
-                    onnx.save(on, args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
+                    onnx.save(on, onnx_path)
+                    # check the onnx file is corroct
+                    onnx.checker.check_model(on)
 
                     # check the validation of the teleportation
                     # 1.extract onnx corrosponding to the teleported model (in original onnx)

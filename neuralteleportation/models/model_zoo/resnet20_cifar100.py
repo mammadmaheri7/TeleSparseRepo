@@ -11,67 +11,51 @@ from neuralteleportation.neuralteleportationmodel import NeuralTeleportationMode
 from neuralteleportation.layers.merge import Add
 
 
-# class BlockCOB(nn.Module):
-#     '''Depthwise conv + Pointwise conv with COB layers'''
-#     def __init__(self, in_planes, out_planes, stride=1):
-#         super(BlockCOB, self).__init__()
-#         self.conv1 = Conv2dCOB(in_planes, in_planes, kernel_size=3, stride=stride, padding=1, groups=in_planes, bias=False)
-#         self.bn1 = BatchNorm2dCOB(in_planes)
-#         self.relu1 = ReLUCOB(inplace=False)
-#         self.conv2 = Conv2dCOB(in_planes, out_planes, kernel_size=1, stride=1, padding=0, bias=False)
-#         self.bn2 = BatchNorm2dCOB(out_planes)
-#         self.relu2 = ReLUCOB(inplace=False)
+def conv3x3(in_planes, out_planes, stride=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=1, bias=False)
 
-#     def forward(self, x):
-#         out = self.conv1(x)
-#         out = self.bn1(out)
-#         out = self.relu1(out)
-#         out = self.conv2(out)
-#         out = self.bn2(out)
-#         out = self.relu2(out)
-#         return out
-
-class BasicBlockCob(nn.Module):
+class BasicBlock(nn.Module):
     expansion = 1
 
     def __init__(self, block_gates, inplanes, planes, stride=1, downsample=None):
-        super(BasicBlockCob, self).__init__()
+        super(BasicBlock, self).__init__()
         self.block_gates = block_gates
-        self.conv1 = Conv2dCOB(inplanes, planes,kernel_size=3 ,stride=stride, padding=1, bias=False)
-        self.bn1 = BatchNorm2dCOB(planes)
-        self.relu1 = ReLUCOB(inplace=False)  # To enable layer removal inplace must be False
-        self.conv2 = Conv2dCOB(planes, planes,kernel_size=3 ,stride=1, padding=1, bias=False)
-        self.bn2 = BatchNorm2dCOB(planes)
-        self.relu2 = ReLUCOB(inplace=False)
+        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.relu1 = nn.ReLU(inplace=False)  # To enable layer removal inplace must be False
+        self.conv2 = conv3x3(planes, planes)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.relu2 = nn.ReLU(inplace=False)
         self.downsample = downsample
         self.stride = stride
-        self.add = Add()
 
     def forward(self, x):
         residual = out = x
+
+        if self.block_gates[0]:
+            out = self.conv1(x)
+            out = self.bn1(out)
+            out = self.relu1(out)
+
+        if self.block_gates[1]:
+            out = self.conv2(out)
+            out = self.bn2(out)
+
         if self.downsample is not None:
             residual = self.downsample(x)
 
-        # if self.block_gates[0]:
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu1(out)
-
-        # if self.block_gates[1]:
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-
-
-        # out = residual + out
-        out = self.add(residual, out)
+        out = residual + out
         out = self.relu2(out)
 
         return out
 
-class Resnet20Cifar100Cob(nn.Module):
 
-    def __init__(self, block, layers, num_classes=100):
+NUM_CLASSES = 100
+class ResNetCifar(nn.Module):
+
+    def __init__(self, block, layers, num_classes=NUM_CLASSES):
         self.nlayers = 0
         # Each layer manages its own gates
         self.layer_gates = []
@@ -82,23 +66,21 @@ class Resnet20Cifar100Cob(nn.Module):
                 self.layer_gates[layer].append([True, True])
 
         self.inplanes = 16  # 64
-        super(Resnet20Cifar100Cob, self).__init__()
-        self.conv1 = Conv2dCOB(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = BatchNorm2dCOB(self.inplanes)
-        # self.relu = nn.ReLU(inplace=True)
-        self.relu = ReLUCOB(inplace=False)
+        super(ResNetCifar, self).__init__()
+        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(self.inplanes)
+        self.relu = nn.ReLU(inplace=False)
         self.layer1 = self._make_layer(self.layer_gates[0], block, 16, layers[0])
         self.layer2 = self._make_layer(self.layer_gates[1], block, 32, layers[1], stride=2)
         self.layer3 = self._make_layer(self.layer_gates[2], block, 64, layers[2], stride=2)
-        self.avgpool = AvgPool2dCOB(kernel_size=8,stride=1)
-        self.flatten = FlattenCOB()
-        self.fc = LinearCOB(64 * block.expansion, num_classes)
+        self.avgpool = nn.AvgPool2d(8, stride=1)
+        self.fc = nn.Linear(64 * block.expansion, num_classes)
 
         for m in self.modules():
-            if isinstance(m, Conv2dCOB):
+            if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, BatchNorm2dCOB):
+            elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
@@ -106,9 +88,9 @@ class Resnet20Cifar100Cob(nn.Module):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                Conv2dCOB(self.inplanes, planes * block.expansion,
+                nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                BatchNorm2dCOB(planes * block.expansion),
+                nn.BatchNorm2d(planes * block.expansion),
             )
 
         layers = []
@@ -129,12 +111,16 @@ class Resnet20Cifar100Cob(nn.Module):
         x = self.layer3(x)
 
         x = self.avgpool(x)
-        # x = x.view(x.size(0), -1)
-        x = self.flatten(x)
+        x = x.view(x.size(0), -1)
         x = self.fc(x)
 
         return x
 
+def resnet20_cifar100(pretrained=False, **kwargs):
+    model = ResNetCifar(BasicBlock, [3, 3, 3], **kwargs)
+    if pretrained:
+        model.load_state_dict(torch.load(weight_dict['resnet20_cifar'])["model_state_dict"])
+    return model
 
 class Resnet20Cifar100CobFlat(nn.Module):
     def __init__(self, num_classes=100):
@@ -340,30 +326,6 @@ class Resnet20Cifar100CobFlat(nn.Module):
 
         return x
 
-    
-# def adjust_state_dict_keys(pretrained_state_dict):
-#         """
-#         This function adjusts the state_dict from the sparse model by adding '.weight', '.bias', etc.
-#         where needed, so they match the expected structure of `mobilenet_cob`.
-#         """
-#         new_state_dict = {}
-
-#         for key, value in pretrained_state_dict.items():
-#             if 'layer' in key:
-#                 layer_num = key.split('.')[1]
-#                 layer_type = key.split('.')[2]
-#                 detail_layer = key.split('.')[3]
-
-#                 if 'conv' in layer_type:
-#                     new_key = f"layer{layer_num}_{layer_type}.{detail_layer}"
-#                     new_state_dict[new_key] = value
-#                 elif 'bn' in layer_type:
-#                     new_key = f"layer{layer_num}_{layer_type}.{detail_layer}"
-#                     new_state_dict[new_key] = value
-#             else:
-#                 new_state_dict[key] = value
-                
-#         return new_state_dict
 
 def apply_mask_and_zero_out(state_dict):
     new_state_dict = {}
