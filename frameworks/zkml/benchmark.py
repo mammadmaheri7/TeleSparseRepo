@@ -121,8 +121,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
     model_out_path = tmp_folder + "msgpack/converted_model.msgpack"
     config_path = tmp_folder + "msgpack/config.msgpack"
 
-    scale_factor = 512
-    k = 17
+    scale_factor = (2**12)
+    k = 18
     num_cols = 10 
     num_randoms = 1024 
 
