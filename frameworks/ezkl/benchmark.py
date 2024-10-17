@@ -578,8 +578,12 @@ def prepare_by_onnx(model_name=None,onnx_path=None):
         # Load the CIFAR-100 test dataset
         test_dataset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
         # Create the DataLoader for the test dataset
-        test_images = DataLoader(test_dataset, batch_size=256, shuffle=False)
+        test_images = DataLoader(test_dataset, batch_size=1, shuffle=False)
         test_images = next(iter(test_images))[0]
+        # Ensure the shape is (1, 3, 32, 32) - add a batch dimension if needed
+        if len(test_images.shape) == 3:  # If the batch dimension is missing
+            test_images = test_images.unsqueeze(0)
+        print("Test images shape:", test_images.shape)
 
         # do inference on the onnx model
         ort_session = onnxruntime.InferenceSession(onnx_path)
