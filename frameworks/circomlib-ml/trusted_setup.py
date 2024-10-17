@@ -146,7 +146,11 @@ if __name__ == "__main__":
         parser.error('--model is required for trusted setup.')
 
     circuit_folder = "./golden_circuits/"
-    target_circom = args.model + '.circom'    
+
+    if args.model == "resnet20":
+        target_circom = "./resnet20.circom" # output of keras2circom
+    else:
+        target_circom = args.model + '.circom'    
     output_folder = f'./{args.output}/'
     os.makedirs(output_folder, exist_ok=True)
 

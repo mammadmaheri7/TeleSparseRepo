@@ -7,6 +7,119 @@ import concurrent.futures, json, threading, psutil, time
 import pandas as pd
 
 
+# copied from models_to_h5.ipynb
+def ResNet20Cifar100(num_classes=100):
+    inputs = tf.keras.Input(shape=(128, 128, 3))  # Assuming input image size is 32x32x3
+
+    # Initial Conv Layer
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+
+    # Layer 1 Block 1
+    residual = x
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 1 Block 2
+    residual = x
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 1 Block 3
+    residual = x
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 2 Block 1 (with downsampling)
+    residual = layers.Conv2D(32, kernel_size=1, strides=2, use_bias=False)(x)
+    residual = layers.BatchNormalization()(residual)
+    x = layers.Conv2D(32, kernel_size=3, strides=2, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 2 Block 2
+    residual = x
+    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 2 Block 3
+    residual = x
+    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 3 Block 1 (with downsampling)
+    residual = layers.Conv2D(64, kernel_size=1, strides=2, use_bias=False)(x)
+    residual = layers.BatchNormalization()(residual)
+    x = layers.Conv2D(64, kernel_size=3, strides=2, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 3 Block 2
+    residual = x
+    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Layer 3 Block 3
+    residual = x
+    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.Add()([x, residual])
+    x = layers.ReLU()(x)
+
+    # Pooling and classification
+    x = layers.GlobalAveragePooling2D()(x)
+    outputs = layers.Dense(num_classes)(x)
+
+    # Create model
+    model = models.Model(inputs, outputs)
+    return model
+
+# Create and compile model
+model = ResNet20Cifar100()
+
+
 p = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 params = {"784_56_10": 44543,
@@ -335,8 +448,12 @@ def prepare(model, layers):
 
     return predictions_tf, test_images
 
-def prepare_cnn(model, layers):
-    if layers[0] == 14:
+def prepare_cnn(model, layers, model_name=None):
+    # check if model name is not None
+    if model_name is not None and model_name=='resnet20':
+        # TODO: load cifar100 dataset
+        test_images = np.random.rand(256*2, 128, 128, 3)
+    elif layers[0] == 14:
         _, test_images = cnn_datasets()
     elif layers[0] == 28:
         test_images, _ = cnn_datasets()
@@ -557,12 +674,25 @@ def benchmark_dnn(test_images, predictions, weights, biases, layers, model_name,
 def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, input_path, zkey, veri_key, save=False, verify = False):
     loss = 0
 
-    target_circom = "_".join(str(x) for x in layers) + '.circom'
+    if model_name == 'resnet20':
+        target_circom = "./golden_circuits/resnet20.circom"
+        json_folder = tmp_folder + "resnet20_js/"
 
-    json_folder = tmp_folder + target_circom[:-7] + "_js/"
+    else:
+        target_circom = "_".join(str(x) for x in layers) + '.circom'
+        json_folder = tmp_folder + target_circom[:-7] + "_js/"
+
     wit_json_file = json_folder + "generate_witness.js"
-    wasm_file = json_folder + target_circom[:-7] + ".wasm"
-    input_path = tmp_folder + "input.json"
+    if model_name == 'resnet20':
+        wasm_file = json_folder + "resnet20.wasm"
+    else:
+        wasm_file = json_folder + target_circom[:-7] + ".wasm"
+
+    # IMPORTANT
+    if model_name == 'resnet20':
+        input_path = "input_resnet20.json"
+    else:
+        input_path = tmp_folder + "input.json"
     wit_file = tmp_folder + "witness.wtns"
 
     mem_usage = []
@@ -574,7 +704,9 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
         cost = 0
         X = test_images[i]
         start_time = time.time()
-        _ = prepare_input_json_cnn(X, layers, input_path)
+
+        if not model_name == 'resnet20':
+            _ = prepare_input_json_cnn(X, layers, input_path)
 
         # command = ['node', wit_json_file, wasm_file, input_path, wit_file]
         # subprocess.run(command)
@@ -728,12 +860,17 @@ if __name__ == "__main__":
     if not args.model or args.size is None:
         parser.error('--model and --size are required for benchmarking.')
 
-    layers = [int(x) for x in args.model.split("_")]
-    model_path = "../../models/"
+    if args.model == "resnet20":
+        layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
+        target_circom = "./golden_circuits/resnet20.circom" # output of keras2circom
+    else:
+        layers = [int(x) for x in args.model.split("_")]
+        target_circom = "_".join(str(x) for x in layers) + '.circom'
 
+    model_path = "../../models/"
     output_folder = f'./{args.output}/'
     os.makedirs(output_folder, exist_ok=True)
-    target_circom = "_".join(str(x) for x in layers) + '.circom'
+    
 
     command = ['circom', "./golden_circuits/" + target_circom, "--r1cs", "--wasm", "--sym", "-o", output_folder]
     res = subprocess.run(command, capture_output=True, text = True)
@@ -754,12 +891,28 @@ if __name__ == "__main__":
         ]
         subprocess.run(trusted_setup_command)
 
-    if layers[0] > 30:
+    if layers[0] > 30 and not (args.model=='resnet20'):
         dnn = True
     else:
         dnn = False
 
-    if dnn:
+    if args.model == "resnet20":
+        # arch_folder = arch_folders[args.model]
+        # model_path = "../../models/"
+        # model_in_path = model_path+arch_folder+args.model + '.h5'
+        model_in_path = '../zkml/resnet20.h5'
+
+        # model = gen_model_cnn(layers, model_in_path)
+        model = ResNet20Cifar100()
+        # TODO: load weights and biases
+        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+        predicted_labels, tests = prepare_cnn(model, layers, model_name = args.model)
+
+        benchmark_cnn(tests[:args.size], predicted_labels[:args.size], 
+                layers, args.model, output_folder, output_folder+"input.json", zkey_1, veri_key, verify=args.debug, save=args.save)
+
+    elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
         model_path = "../../models/"
         model_in_path = model_path+arch_folder+args.model + '.h5'
@@ -783,3 +936,5 @@ if __name__ == "__main__":
 
         benchmark_cnn(tests[:args.size], predicted_labels[:args.size], 
                 layers, args.model, output_folder, output_folder+"input.json", zkey_1, veri_key, verify=args.debug, save=args.save)
+
+

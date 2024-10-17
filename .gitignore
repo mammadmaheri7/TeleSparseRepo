@@ -25,3 +25,15 @@ models/input-conv2d-conv2d-dense-dense/14_5_11_80_10_3.pt
 models/input-conv2d-conv2d-dense-dense/14_5_11_80_10_3.onnx
 models/input-conv2d-conv2d-dense-dense/14_5_11_80_10_3.h5
 
+frameworks/zkml/converted_model/*
+frameworks/zkml/config_new.msgpack
+benchmarks/benchmark_results.csv
+frameworks/zkml/example_inp_new.msgpack
+frameworks/zkml/params_kzg/18.params
+frameworks/zkml/converted_model_new.msgpack
+frameworks/zkml/.DS_Store
+frameworks/.DS_Store
+benchmarks/benchmark_results.csv
+benchmarks/.DS_Store
+.gitignore
+frameworks/zkml/.DS_Store
