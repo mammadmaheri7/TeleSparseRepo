@@ -441,8 +441,11 @@ if __name__ == '__main__':
     for file in os.listdir(args.prefix_dir + "images"):
         os.remove(os.path.join(args.prefix_dir + "images", file))
     # download the CIFAR100 dataset
-    
-    testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transforms.ToTensor())
+    transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))  # Mean and std for CIFAR-10
+    ])
+    testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
     testloader = DataLoader(testset, batch_size=1, shuffle=True)
     # save 10 images
     for i, data in enumerate(testloader):
