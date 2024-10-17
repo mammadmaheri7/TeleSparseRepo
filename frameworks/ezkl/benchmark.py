@@ -338,6 +338,8 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         x = (img.cpu().detach().numpy().reshape([-1])).tolist()
         data = dict(input_data = [x])
         # Serialize data into file:
+        # if data_path is not exist, create it
+        os.makedirs(os.path.dirname(data_path), exist_ok=True)
         json.dump(data, open(data_path, 'w'))
 
         command = ["python", "gen_proof.py", "--model", model_path, "--data", data_path, "--output", output_folder, "--mode", mode]
