@@ -1,5 +1,6 @@
 import re
 import os, subprocess, sys
+import onnxruntime
 import torch, struct, os, psutil, subprocess, time, threading
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,6 +15,7 @@ import time
 import argparse
 
 from torch.utils.data import DataLoader, TensorDataset
+from torchvision import datasets, transforms
 
 params = {"784_56_10": 44543,
           "196_25_10": 5185,
@@ -31,7 +33,8 @@ accuracys = {"784_56_10": 0.9740,
 
 arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "14_5_11_80_10_3": "input-conv2d-conv2d-dense-dense/",
-                "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/"}
+                "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
+                "resnet20": "resnet20/"}
 
 
 def dnn_datasets():
@@ -231,9 +234,13 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
 
 def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes=""):
     print("Benchmarking CNN model called")
-    data_path = os.path.join(output_folder, 'input.json')
-    model_path = os.path.join(output_folder, 'network.onnx')
+    # check model is instance of string and contain .onnx
+    if isinstance(model, str) and ".onnx" in model:
+        model_path = model
+    else:
+        model_path = os.path.join(output_folder, 'network.onnx')
 
+    data_path = os.path.join(output_folder,model_name, 'input.json')
     loss = 0
     mem_usage = []
     time_cost = []
@@ -249,92 +256,83 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
     # print("Sampled data shape:", sampled_data.shape)
     # print summary of the model
 
-    model.eval()
-    try:
-        with torch.no_grad():
-                torch.onnx.export(model, 
-                            sampled_data, 
-                            model_path, 
-                            export_params=True, 
-                            # opset_version=10, 
-                            opset_version=12,
-                            do_constant_folding=True, 
-                            input_names=['input'], 
-                            output_names=['output'],
-                            dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-                                            'output' : {0 : 'batch_size'}})
-                import onnx
-                on = onnx.load(model_path)
-                for tensor in on.graph.input:
-                    for dim_proto in tensor.type.tensor_type.shape.dim:
-                        if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
-                            dim_proto.Clear()
-                            dim_proto.dim_value = 1   # fixed batch size
-                for tensor in on.graph.output:
-                    for dim_proto in tensor.type.tensor_type.shape.dim:
-                        if dim_proto.HasField("dim_param"):
-                            dim_proto.Clear()
-                            dim_proto.dim_value = 1   # fixed batch size
-                onnx.save(on, model_path)
+    if not isinstance(model, str) or ".onnx" not in model:
+        model.eval()
+        try:
+            with torch.no_grad():
+                    torch.onnx.export(model, 
+                                sampled_data, 
+                                model_path, 
+                                export_params=True, 
+                                # opset_version=10, 
+                                opset_version=12,
+                                do_constant_folding=True, 
+                                input_names=['input'], 
+                                output_names=['output'],
+                                dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                                'output' : {0 : 'batch_size'}})
+                    import onnx
+                    on = onnx.load(model_path)
+                    for tensor in on.graph.input:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
+                                dim_proto.Clear()
+                                dim_proto.dim_value = 1   # fixed batch size
+                    for tensor in on.graph.output:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"):
+                                dim_proto.Clear()
+                                dim_proto.dim_value = 1   # fixed batch size
+                    onnx.save(on, model_path)
 
-                on = onnx.load(model_path)
-                on = onnx.shape_inference.infer_shapes(on)
-                onnx.save(on, model_path)
-
-    except Exception as e:
-        print(f"Error: {e}")
-        # throw error
-        exit(1)
+                    on = onnx.load(model_path)
+                    on = onnx.shape_inference.infer_shapes(on)
+                    onnx.save(on, model_path)
+        except Exception as e:
+            print(f"Error: {e}")
+            # throw error
+            exit(1)
+    else:
+        print("Model is already in ONNX format and will be used for benchmarking - directory:", model_path)
 
     for i in range(len(test_images)):
         print ("Process for image", i)
         start_time = time.time()
         img = test_images[i:i+1].detach().cpu()
-        # with torch.no_grad():
-        #     try:
-        #         torch.onnx.export(model, 
-        #                     img, 
-        #                     model_path, 
-        #                     export_params=True, 
-        #                     opset_version=12, 
-        #                     do_constant_folding=True, 
-        #                     input_names=['input_0'], 
-        #                     output_names=['output'])
-        #     except Exception as e:
-        #         print(f"Error: {e}")
-        #         # throw error
-        #         exit(1)
 
-        with torch.no_grad():
-                torch.onnx.export(model, 
-                            img, 
-                            model_path, 
-                            export_params=True, 
-                            # opset_version=10, 
-                            opset_version=12,
-                            do_constant_folding=True, 
-                            input_names=['input'], 
-                            output_names=['output'],
-                            dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
-                                            'output' : {0 : 'batch_size'}})
-                
-                import onnx
-                on = onnx.load(model_path)
-                for tensor in on.graph.input:
-                    for dim_proto in tensor.type.tensor_type.shape.dim:
-                        if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
-                            dim_proto.Clear()
-                            dim_proto.dim_value = 1   # fixed batch size
-                for tensor in on.graph.output:
-                    for dim_proto in tensor.type.tensor_type.shape.dim:
-                        if dim_proto.HasField("dim_param"):
-                            dim_proto.Clear()
-                            dim_proto.dim_value = 1   # fixed batch size
-                onnx.save(on, model_path)
+        if not isinstance(model, str) or ".onnx" not in model:
+            with torch.no_grad():
+                    torch.onnx.export(model, 
+                                img, 
+                                model_path, 
+                                export_params=True, 
+                                # opset_version=10, 
+                                opset_version=12,
+                                do_constant_folding=True, 
+                                input_names=['input'], 
+                                output_names=['output'],
+                                dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                                'output' : {0 : 'batch_size'}})
+                    
+                    import onnx
+                    on = onnx.load(model_path)
+                    for tensor in on.graph.input:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
+                                dim_proto.Clear()
+                                dim_proto.dim_value = 1   # fixed batch size
+                    for tensor in on.graph.output:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"):
+                                dim_proto.Clear()
+                                dim_proto.dim_value = 1   # fixed batch size
+                    onnx.save(on, model_path)
 
-                on = onnx.load(model_path)
-                on = onnx.shape_inference.infer_shapes(on)
-                onnx.save(on, model_path)
+                    on = onnx.load(model_path)
+                    on = onnx.shape_inference.infer_shapes(on)
+                    onnx.save(on, model_path)
+        else:
+            print("Model is already in ONNX format and will be used for benchmarking - directory:", model_path)
 
         x = (img.cpu().detach().numpy().reshape([-1])).tolist()
         data = dict(input_data = [x])
@@ -375,7 +373,11 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
 
     print ("Total time:", time.time() - benchmark_start_time)
 
-    layers = model_name.split("_")
+    if model_name=="resnet20":
+        layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
+    else:
+        layers = model_name.split("_")
+
     arch = arch_folders[model_name][:-1]
     arch = '-'.join(word.capitalize() for word in arch.split('-')) + '_Kernal'
 
@@ -565,6 +567,32 @@ def prepare(model, layers):
     predicted_labels = predicted_labels.tolist()
     return predicted_labels, test_images
 
+def prepare_by_onnx(model_name=None,onnx_path=None):
+    if model_name=='resnet20':
+        # Define the transformations for the test dataset (Normalize CIFAR-100 according to dataset statistics)
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))  # Mean and std for CIFAR-100
+        ])
+        # Load the CIFAR-100 test dataset
+        test_dataset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
+        # Create the DataLoader for the test dataset
+        test_images = DataLoader(test_dataset, batch_size=256, shuffle=False)
+        test_images = next(iter(test_images))[0]
+
+        # do inference on the onnx model
+        ort_session = onnxruntime.InferenceSession(onnx_path)
+        ort_inputs = {ort_session.get_inputs()[0].name: test_images.numpy()}
+        ort_outs = ort_session.run(None, ort_inputs)
+        predicted_labels = np.argmax(ort_outs[0], axis=1)
+        return predicted_labels, test_images
+    else:
+        print("Model not supported")
+        # error ValueError: Model not supported
+        exit(1)
+
+
+
 def prepare_cnn(model, layers):
     if layers[0] == 14:
         _, test_images = cnn_datasets()
@@ -657,12 +685,15 @@ if __name__ == "__main__":
     if not args.model or args.size is None:
         parser.error('--model and --size are required for benchmarking.')
 
-    layers = [int(x) for x in args.model.split("_")]
+    if args.model == "resnet20":
+        layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
+    else:
+        layers = [int(x) for x in args.model.split("_")]
     model_path = "../../models/"
 
     start = 0
 
-    if layers[0] > 30:
+    if layers[0] > 30 and not args.model=="resnet20":
         dnn = True
     else:
         dnn = False
@@ -679,7 +710,13 @@ if __name__ == "__main__":
         start = args.agg
         notes += f' | start from {start}'
 
-    if dnn:
+    if args.model == "resnet20":
+        arch_folder = arch_folders[args.model]
+        onnx_path = f"../../models/{args.model}.onnx"
+        predicted_labels, test_images = prepare_by_onnx(args.model,onnx_path)
+        benchmark_cnn(test_images, predicted_labels, onnx_path, args.model, 
+                    mode=mode, save=args.save, notes=notes)
+    elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
 
         model_path = "../../models/"
