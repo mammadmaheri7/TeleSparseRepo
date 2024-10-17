@@ -37,3 +37,5 @@ benchmarks/benchmark_results.csv
 benchmarks/.DS_Store
 .gitignore
 frameworks/zkml/.DS_Store
+frameworks/circomlib-ml/golden_circuits/resnet20.circom
+*.circom

@@ -6,9 +6,10 @@ import concurrent.futures, json, threading, psutil, time
 
 import pandas as pd
 
-
+from tensorflow.keras import layers, models
 # copied from models_to_h5.ipynb
 def ResNet20Cifar100(num_classes=100):
+    from tensorflow.keras import layers, models
     inputs = tf.keras.Input(shape=(128, 128, 3))  # Assuming input image size is 32x32x3
 
     # Initial Conv Layer
@@ -690,7 +691,13 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
 
     # IMPORTANT
     if model_name == 'resnet20':
-        input_path = "input_resnet20.json"
+        input_path = "./golden_circuits/final_input_resnet20.json"
+        # combine circuit.json and output.json to create input_path.json
+        circuit_json = json.load(open("./golden_circuits/circuit_resnet20.json"))
+        input_json = json.load(open("./golden_circuits/output_resnet20.json"))
+        final_json = {**circuit_json, **input_json}
+        with open(input_path, "w") as f:
+            json.dump(final_json, f)
     else:
         input_path = tmp_folder + "input.json"
     wit_file = tmp_folder + "witness.wtns"
@@ -853,7 +860,7 @@ if __name__ == "__main__":
         show_models()
         sys.exit()
 
-    if args.model not in params:
+    if args.model not in params and args.model != "resnet20":
         print ("Please check the model name by using '--list'")
         sys.exit()
 
