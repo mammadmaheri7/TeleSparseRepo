@@ -10,104 +10,104 @@ from tensorflow.keras import layers, models
 # copied from models_to_h5.ipynb
 def ResNet20Cifar100(num_classes=100):
     from tensorflow.keras import layers, models
-    inputs = tf.keras.Input(shape=(128, 128, 3))  # Assuming input image size is 32x32x3
+    inputs = tf.keras.Input(shape=(32, 32, 3))  # Assuming input image size is 32x32x3
 
     # Initial Conv Layer
     x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(inputs)
     x = layers.BatchNormalization()(x)
     x = layers.ReLU()(x)
 
-    # Layer 1 Block 1
-    residual = x
-    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 1 Block 1
+    # residual = x
+    # x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 1 Block 2
-    residual = x
-    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 1 Block 2
+    # residual = x
+    # x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 1 Block 3
-    residual = x
-    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 1 Block 3
+    # residual = x
+    # x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(16, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 2 Block 1 (with downsampling)
-    residual = layers.Conv2D(32, kernel_size=1, strides=2, use_bias=False)(x)
-    residual = layers.BatchNormalization()(residual)
-    x = layers.Conv2D(32, kernel_size=3, strides=2, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 2 Block 1 (with downsampling)
+    # residual = layers.Conv2D(32, kernel_size=1, strides=2, use_bias=False)(x)
+    # residual = layers.BatchNormalization()(residual)
+    # x = layers.Conv2D(32, kernel_size=3, strides=2, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 2 Block 2
-    residual = x
-    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 2 Block 2
+    # residual = x
+    # x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 2 Block 3
-    residual = x
-    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 2 Block 3
+    # residual = x
+    # x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(32, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 3 Block 1 (with downsampling)
-    residual = layers.Conv2D(64, kernel_size=1, strides=2, use_bias=False)(x)
-    residual = layers.BatchNormalization()(residual)
-    x = layers.Conv2D(64, kernel_size=3, strides=2, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 3 Block 1 (with downsampling)
+    # residual = layers.Conv2D(64, kernel_size=1, strides=2, use_bias=False)(x)
+    # residual = layers.BatchNormalization()(residual)
+    # x = layers.Conv2D(64, kernel_size=3, strides=2, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 3 Block 2
-    residual = x
-    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 3 Block 2
+    # residual = x
+    # x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
-    # Layer 3 Block 3
-    residual = x
-    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
-    x = layers.BatchNormalization()(x)
-    # x = layers.Add()([x, residual])
-    x = layers.ReLU()(x)
+    # # Layer 3 Block 3
+    # residual = x
+    # x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # x = layers.ReLU()(x)
+    # x = layers.Conv2D(64, kernel_size=3, strides=1, padding='valid', use_bias=False)(x)
+    # x = layers.BatchNormalization()(x)
+    # # x = layers.Add()([x, residual])
+    # x = layers.ReLU()(x)
 
     # Pooling and classification
     x = layers.GlobalAveragePooling2D()(x)
@@ -453,7 +453,7 @@ def prepare_cnn(model, layers, model_name=None):
     # check if model name is not None
     if model_name is not None and model_name=='resnet20':
         # TODO: load cifar100 dataset
-        test_images = np.random.rand(256*2, 128, 128, 3)
+        test_images = np.random.rand(256*2, 32, 32, 3)
     elif layers[0] == 14:
         _, test_images = cnn_datasets()
     elif layers[0] == 28:
@@ -698,6 +698,11 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
         final_json = {**circuit_json, **input_json}
         with open(input_path, "w") as f:
             json.dump(final_json, f)
+        # print all keys circuit_json
+        print("circuit_json keys:", circuit_json.keys())
+        print("\n\n")
+        print("input_json keys:", input_json.keys())
+        print("============================")
     else:
         input_path = tmp_folder + "input.json"
     wit_file = tmp_folder + "witness.wtns"
@@ -907,7 +912,7 @@ if __name__ == "__main__":
         # arch_folder = arch_folders[args.model]
         # model_path = "../../models/"
         # model_in_path = model_path+arch_folder+args.model + '.h5'
-        model_in_path = '../zkml/resnet20.h5'
+        # model_in_path = '../zkml/resnet20.h5'
 
         # model = gen_model_cnn(layers, model_in_path)
         model = ResNet20Cifar100()
