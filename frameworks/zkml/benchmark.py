@@ -9,7 +9,10 @@ params = {"784_56_10": 44543,
           "196_24_14_10": 5228,
             "28_6_16_10_5": 5142,
             "14_5_11_80_10_3": 4966, # @TODO: May doublecheck
-            "28_6_16_120_84_10_5": 44530}
+            "28_6_16_120_84_10_5": 44530,
+            "resnet20": (-1),
+            }
+         
 
 accuracys = {"784_56_10": 0.9740,
             "196_25_10": 0.9541,
@@ -20,7 +23,8 @@ accuracys = {"784_56_10": 0.9740,
 
 arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "14_5_11_80_10_3": "input-conv2d-conv2d-dense-dense/",
-                "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/"}
+                "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
+                "resnet20": "resnet20/"}
 
 def get_predictions(interpreter, test_images):
     predictions = []
@@ -96,20 +100,30 @@ def dnn_datasets():
 
     return test_images_tf, test_images_tf_downsampled
 
-def cnn_datasets():
-    # Load TensorFlow MNIST data
-    mnist = tf.keras.datasets.mnist
-    (train_images, train_labels), (test_images, test_labels) = mnist.load_data()
+def cnn_datasets(dataset_name=None):
+    if dataset_name is not None and dataset_name == "cifar100":
+        # Load TensorFlow CIFAR100 data
+        cifar100 = tf.keras.datasets.cifar100
+        (train_images, train_labels), (test_images, test_labels) = cifar100.load_data()
+        train_images_tf = train_images / 255.0
+        test_images_tf = test_images / 255.0
+        train_images_tf = train_images_tf.reshape(train_images.shape[0], 32, 32, 3)
+        test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
+        return test_images_tf, test_images_tf
+    else:
+        # Load TensorFlow MNIST data
+        mnist = tf.keras.datasets.mnist
+        (train_images, train_labels), (test_images, test_labels) = mnist.load_data()
 
-    train_images_tf = train_images / 255.0
-    test_images_tf = test_images / 255.0
-    train_images_tf = train_images_tf.reshape(train_images.shape[0], 28, 28, 1)
-    test_images_tf = test_images_tf.reshape(test_images.shape[0], 28, 28, 1)
+        train_images_tf = train_images / 255.0
+        test_images_tf = test_images / 255.0
+        train_images_tf = train_images_tf.reshape(train_images.shape[0], 28, 28, 1)
+        test_images_tf = test_images_tf.reshape(test_images.shape[0], 28, 28, 1)
 
-    train_images_tf_14 = tf.image.resize(train_images_tf, [14, 14]).numpy()
-    test_images_tf_14 = tf.image.resize(test_images_tf, [14, 14]).numpy()
+        train_images_tf_14 = tf.image.resize(train_images_tf, [14, 14]).numpy()
+        test_images_tf_14 = tf.image.resize(test_images_tf, [14, 14]).numpy()
 
-    return test_images_tf, test_images_tf_14
+        return test_images_tf, test_images_tf_14
     
 def benchmark(test_images, predictions, model_name, model_in_path, circuit_folder, test = False, save = False, notes = ""):
     # Convert the model
@@ -121,10 +135,19 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
     model_out_path = tmp_folder + "msgpack/converted_model.msgpack"
     config_path = tmp_folder + "msgpack/config.msgpack"
 
-    scale_factor = (2**12)
-    k = 18
-    num_cols = 10 
-    num_randoms = 1024 
+    if model_name == "resnet20":
+        scale_factor = (2**12)
+        k = 21
+        num_cols = 32
+        num_randoms = 1024 * 32
+    else:
+        scale_factor = (2**12)
+        k = 18
+        num_cols = 10 
+        num_randoms = 1024 
+
+    print("=== PROVING PARAMETERS ===" , "\t scale_factor:", scale_factor, "\t k:", k, "\t num_cols:", num_cols, "\t num_randoms:", num_randoms)
+    time.sleep(2)
 
     command = ["python", model_convert_path, "--model", f"{model_in_path}",
             "--model_output", f"{model_out_path}", "--config_output",
@@ -318,7 +341,10 @@ if __name__ == "__main__":
         print ("Please check the model name by using '--list'")
         sys.exit()
 
-    layers = [int(x) for x in args.model.split("_")]
+    if args.model == "resnet20":
+        layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
+    else:
+        layers = [int(x) for x in args.model.split("_")]
     model_path = "../../models/"
 
     if not args.save:
@@ -330,7 +356,9 @@ if __name__ == "__main__":
         start = args.agg
         notes = f'start from {start}'
 
-    if layers[0] > 30:
+    if args.model == "resnet20":
+        cnn = True
+    elif layers[0] > 30:
         dnn = True
     else:
         dnn = False
@@ -341,23 +369,26 @@ if __name__ == "__main__":
     else:
         circuit_folder = "./bin/"
 
-
-    if dnn:
-        arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
-
-        model_path = "../../models/"
-
-        model_in_path = model_path+arch_folder+args.model + '.tflite'
-
+    if args.model == "resnet20":
+        print(" MAKE SURE TO RUN models_to_h5.ipynb FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
+        arch_folder = "resnet20/"
+        os.makedirs(model_path + arch_folder, exist_ok=True)
+        model_in_path = model_path + arch_folder + args.model + '.tflite'
         interpreter = tf.lite.Interpreter(model_path=model_in_path)
         interpreter.allocate_tensors()
-
+        tests, _ = cnn_datasets(dataset_name="cifar100")
+        predicted_labels = get_predictions(interpreter, tests)
+    elif dnn:
+        arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
+        model_path = "../../models/"
+        model_in_path = model_path+arch_folder+args.model + '.tflite'
+        interpreter = tf.lite.Interpreter(model_path=model_in_path)
+        interpreter.allocate_tensors()
         if layers[0] == 784:
             tests, _ = dnn_datasets()
         else:
             _, tests = dnn_datasets()
         predicted_labels = get_predictions(interpreter, tests)
-
     else:
         arch_folder = arch_folders[args.model]
         model_in_path = model_path + arch_folder + args.model +'.tflite'
@@ -377,5 +408,6 @@ if __name__ == "__main__":
         else:
             _, tests = cnn_datasets()
         predicted_labels = get_predictions(interpreter, tests)
+
 
     benchmark(tests[start:start+args.size], predicted_labels[start:start+args.size], args.model, model_in_path, circuit_folder, save=args.save, notes = notes)
