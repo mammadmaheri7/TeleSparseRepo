@@ -713,7 +713,7 @@ if __name__ == "__main__":
 
     if args.model == "resnet20":
         arch_folder = arch_folders[args.model]
-        onnx_path = f"../../models/{args.model}.onnx"
+        onnx_path = f"../../models/resnet20/{args.model}.onnx"
         predicted_labels, test_images = prepare_by_onnx(args.model,onnx_path)
         benchmark_cnn(test_images, predicted_labels, onnx_path, args.model, 
                     mode=mode, save=args.save, notes=notes)
