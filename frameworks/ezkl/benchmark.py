@@ -678,6 +678,7 @@ if __name__ == "__main__":
 
     # add argument sparsity with default value 0.0
     parser.add_argument('--sparsity', type=float, default=0.0, help='Sparsity of the model')
+    parser.add_argument('--teleported', action='store_true', help='Flag to indicate if use teleported mode')
 
     args = parser.parse_args()
 
@@ -719,8 +720,19 @@ if __name__ == "__main__":
 
     if args.model == "resnet20":
         arch_folder = arch_folders[args.model]
-        onnx_path = f"../../models/resnet20/{args.model}.onnx"
+        
+        # define the onnx path 
+        onnx_path = f"../../models/resnet20/{args.model}"
+        if args.sparsity > 0.0:
+            onnx_path += f"_sparsity{args.sparsity}"
+        if args.teleported:
+            onnx_path += "_teleported"
+        onnx_path += ".onnx"
+        
+        # do inference on the onnx model + dataset loading
         predicted_labels, test_images = prepare_by_onnx(args.model,onnx_path)
+
+        # do benchmarking
         benchmark_cnn(test_images, predicted_labels, onnx_path, args.model, 
                     mode=mode, save=args.save, notes=notes)
     elif dnn:
