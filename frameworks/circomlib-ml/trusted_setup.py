@@ -215,12 +215,12 @@ if __name__ == "__main__":
     r1cs_file = os.path.join(output_folder, target_circom.replace(".circom", ".r1cs"))
     if os.path.isfile(r1cs_file):
         print(f"File '{args.model}.r1cs' already exists.")
+        constraints, digit = 0, 0
     else:
         command = ['circom', circuit_folder + target_circom, "--r1cs", "--wasm", "--sym", "-o", output_folder]
         res = subprocess.run(command, capture_output=True, text = True)
         print (res.stdout)
-    
-    constraints, digit = extract_info(res.stdout)
+        constraints, digit = extract_info(res.stdout)
     time_cost, mem_cost = setup(digit, args.model, output_folder)
 
     # Specify the CSV file name
