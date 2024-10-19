@@ -883,10 +883,14 @@ if __name__ == "__main__":
     output_folder = f'./{args.output}/'
     os.makedirs(output_folder, exist_ok=True)
     
-
-    command = ['circom', "./golden_circuits/" + target_circom, "--r1cs", "--wasm", "--sym", "-o", output_folder]
-    res = subprocess.run(command, capture_output=True, text = True)
-    print (res.stdout)
+    # check if the files exist
+    r1cs_file = os.path.join(output_folder, target_circom.replace(".circom", ".r1cs"))
+    if os.path.exists(r1cs_file):
+        print("bencmark.py - r1cs file already exists")
+    else:
+        command = ['circom', "./golden_circuits/" + target_circom, "--r1cs", "--wasm", "--sym", "-o", output_folder]
+        res = subprocess.run(command, capture_output=True, text = True)
+        print (res.stdout)
     # digit = find_digit(res.stdout)
 
     zkey_1 = output_folder + f"ceremony-{args.model}/test_0000.zkey"
