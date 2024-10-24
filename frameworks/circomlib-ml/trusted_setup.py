@@ -127,15 +127,15 @@ def setup(digit, model_name, output_folder):
     # command = ['snarkjs', 'powersoftau', 'prepare', 'phase2', ptau_2,ptau_3, '-v']
     # mem_usage = max(mem_usage, execute_and_monitor(command))
 
-    # Set the NODE_OPTIONS environment variable to 128 GB
-    os.environ["NODE_OPTIONS"] = "--max-old-space-size=131072"
+    # Set the NODE_OPTIONS environment variable to 256 GB
+    os.environ["NODE_OPTIONS"] = "--max-old-space-size=262144"
     print(f"NODE_OPTIONS: {os.environ['NODE_OPTIONS']}")
-    
+
     # Check if the .r1cs file exists
     r1cs_path = output_folder + model_name + ".r1cs"
     zkey_1 = ceremony_folder + 'test_0000.zkey'
     if not os.path.exists(zkey_1):
-        command = ['node','--max-old-space-size=131072', wrapper_path, 'groth16', 'setup', r1cs_path, ptau_3, zkey_1]
+        command = ['node','--max-old-space-size=262144', wrapper_path, 'groth16', 'setup', r1cs_path, ptau_3, zkey_1]
         print(command)
         mem_usage = max(mem_usage, execute_and_monitor(command))
     else:
