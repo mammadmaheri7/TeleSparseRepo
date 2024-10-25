@@ -745,8 +745,11 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
                     print("circuit.circom copied successfully to golden_circuits")
 
             # add the keras2circom main folder path to sys.path
-            sys.path.append('./keras2circom_mmd')
+            
             # run keras2circom_output_path/circuit.py ./kera2circom_output_path/circuit.json data_path --output ./kera2circom_output_path -> stores ./kera2circom_output_path/output.json
+            env = os.environ.copy()
+            x_directory = os.path.abspath("./keras2circom_mmd")
+            env["PYTHONPATH"] = f'{x_directory}:{env.get("PYTHONPATH", "")}'
             command = ['python', f'{keras2circom_output_path}/circuit.py', f'{keras2circom_output_path}/circuit.json', data_path, '--output', f'{keras2circom_output_path}/output.json']
             res = subprocess.run(command)
             if res.returncode != 0:
