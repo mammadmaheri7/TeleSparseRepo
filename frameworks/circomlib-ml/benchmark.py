@@ -726,7 +726,7 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
             keras2circom_output_path = "./golden_circuits/resnet20_keras_output"
             os.makedirs(keras2circom_output_path, exist_ok=True)
             # python ./keras2circom/main.py --h5_path ../zkml/resnet20.h5 --output keras2circom_output_path
-            command = ['python', './keras2circom/main.py', '--h5_path', h5_path, '--output', keras2circom_output_path]
+            command = ['python', './keras2circom_mmd/main.py', '--h5_path', h5_path, '--output', keras2circom_output_path]
             res = subprocess.run(command)
             if res.returncode != 0:
                 print("Error in running keras2circom")
