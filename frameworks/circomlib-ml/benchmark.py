@@ -850,6 +850,7 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
 
     print ("Total time:", time.time() - benchmark_start_time)
     # layers = model_name.split("_")
+    layers = [str(x) for x in layers]
 
     if model_name == 'resnet20':
         arch = "Resnet20"
