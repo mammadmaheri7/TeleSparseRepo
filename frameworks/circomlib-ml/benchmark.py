@@ -978,6 +978,32 @@ if __name__ == "__main__":
     model_path = "../../models/"
     output_folder = f'./{args.output}/'
     os.makedirs(output_folder, exist_ok=True)
+
+    # create ./golden_circuits/resnet20.circom (before going through the loop)
+    if args.model == "resnet20":
+        # run keras2circom main.py
+        keras2circom_output_path = "./golden_circuits/resnet20_keras_output"
+        os.makedirs(keras2circom_output_path, exist_ok=True)
+        # python ./keras2circom/main.py ../zkml/resnet20.h5 --output keras2circom_output_path
+        command = ['python', './keras2circom_mmd/main.py', '../zkml/resnet20.h5', '--output', keras2circom_output_path]
+        res = subprocess.run(command)
+        if res.returncode != 0:
+            print("Error in running keras2circom")
+            print(res)
+            sys.exit()
+        else:
+            print("keras2circom executed successfully")
+            # copy the circuit.circom to golden_circuits
+            command = ['cp', f'{keras2circom_output_path}/circuit.circom', './golden_circuits/resnet20.circom']
+            # remove other files
+            command = ['rm', '-rf', keras2circom_output_path]
+            res = subprocess.run(command)
+            if res.returncode != 0:
+                print("Error in copying circuit.circom")
+                print(res)
+                sys.exit()
+            else:
+                print("circuit.circom copied successfully to golden_circuits")
     
     # check if the files exist
     r1cs_file = os.path.join(output_folder, target_circom.replace(".circom", ".r1cs"))
