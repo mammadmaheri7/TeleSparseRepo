@@ -216,7 +216,8 @@ if __name__ == "__main__":
 
     # check if the files already exist
     r1cs_file = os.path.join(output_folder, target_circom.replace(".circom", ".r1cs"))
-    if os.path.isfile(r1cs_file):
+    # if os.path.isfile(r1cs_file):
+    if False:
         print(f"File '{args.model}.r1cs' already exists.")
         constraints, digit = 0, 0
     else:
