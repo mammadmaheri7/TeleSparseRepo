@@ -849,8 +849,12 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
 
     print ("Total time:", time.time() - benchmark_start_time)
     layers = model_name.split("_")
-    arch = arch_folders[model_name][:-1]
-    arch = '-'.join(word.capitalize() for word in arch.split('-')) + '_Kernal'
+
+    if model_name == 'resnet20':
+        arch = "Resnet20"
+    else:
+        arch = arch_folders[model_name][:-1]
+        arch = '-'.join(word.capitalize() for word in arch.split('-')) + '_Kernal'
 
     layers[0] = str(int(layers[0])**2)
     new_row = {
@@ -962,7 +966,8 @@ if __name__ == "__main__":
         parser.error('--model and --size are required for benchmarking.')
 
     if args.model == "resnet20":
-        layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
+        # layers = [32, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
+        layers = [32, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
         target_circom = "./golden_circuits/resnet20.circom" # output of keras2circom
     else:
         layers = [int(x) for x in args.model.split("_")]
