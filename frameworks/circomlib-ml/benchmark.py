@@ -725,6 +725,7 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
     else:
         input_path = tmp_folder + "input.json"
     wit_file = tmp_folder + "witness.wtns"
+    print(sag)
 
     mem_usage = []
     time_cost = []
