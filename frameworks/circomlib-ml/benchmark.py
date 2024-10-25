@@ -744,21 +744,16 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
                 else:
                     print("circuit.circom copied successfully to golden_circuits")
 
+            # add the keras2circom main folder path to sys.path
+            sys.path.append('./keras2circom_mmd')
             # run keras2circom_output_path/circuit.py ./kera2circom_output_path/circuit.json data_path --output ./kera2circom_output_path -> stores ./kera2circom_output_path/output.json
-            # command = ['python', f'{keras2circom_output_path}/circuit.py', f'{keras2circom_output_path}/circuit.json', data_path, '--output', f'{keras2circom_output_path}/output.json']
-            # cd to keras2circom_output_path the run command
-            current_dir = os.getcwd()
-            os.chdir(keras2circom_output_path)
-            # command = ['python', f'{keras2circom_output_path}/circuit.py', f'{keras2circom_output_path}/circuit.json', data_path, '--output', f'{keras2circom_output_path}/output.json']
-            command = ['python', 'circuit.py', 'circuit.json', current_dir+data_path, '--output', 'output.json']
+            command = ['python', f'{keras2circom_output_path}/circuit.py', f'{keras2circom_output_path}/circuit.json', data_path, '--output', f'{keras2circom_output_path}/output.json']
             res = subprocess.run(command)
             if res.returncode != 0:
                 print("Error in running circuit.py")
                 print(res)
                 return
             else:
-                # back to the original directory
-                os.chdir(current_dir)
                 print("circuit.py executed successfully")
                 # copy circuit.json to golden_circuits + copy output.json to golden_circuits
                 command = ['cp', f'{keras2circom_output_path}/circuit.json', './golden_circuits/circuit_resnet20.json']
