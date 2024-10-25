@@ -750,7 +750,7 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
             env = os.environ.copy()
             x_directory = os.path.abspath("./keras2circom_mmd")
             env["PYTHONPATH"] = f'{x_directory}:{env.get("PYTHONPATH", "")}'
-            command = ['python', f'{keras2circom_output_path}/circuit.py', f'{keras2circom_output_path}/circuit.json', data_path, '--output', f'{keras2circom_output_path}/output.json']
+            command = ['python', f'{keras2circom_output_path}/circuit.py', f'{keras2circom_output_path}/circuit.json', data_path, '--output', f'{keras2circom_output_path}']
             res = subprocess.run(command,env=env)
             if res.returncode != 0:
                 print("Error in running circuit.py")
