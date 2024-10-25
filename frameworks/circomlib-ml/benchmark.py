@@ -995,8 +995,6 @@ if __name__ == "__main__":
             print("keras2circom executed successfully")
             # copy the circuit.circom to golden_circuits
             command = ['cp', f'{keras2circom_output_path}/circuit.circom', './golden_circuits/resnet20.circom']
-            # remove other files
-            command = ['rm', '-rf', keras2circom_output_path]
             res = subprocess.run(command)
             if res.returncode != 0:
                 print("Error in copying circuit.circom")
