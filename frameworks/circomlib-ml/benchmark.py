@@ -848,7 +848,7 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
         time_cost.append(time_prove)
 
     print ("Total time:", time.time() - benchmark_start_time)
-    layers = model_name.split("_")
+    # layers = model_name.split("_")
 
     if model_name == 'resnet20':
         arch = "Resnet20"
