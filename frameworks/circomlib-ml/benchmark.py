@@ -706,10 +706,18 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
         if model_name == 'resnet20':
             data_path = output_folder + "input.json"
             # dump X to data_path
+
+            # random_data = np.random.rand(32, 32, 3)
+            # random_data *= (10**18)
+
+            # with open('input.json', 'w') as f:
+            #     json.dump({"in": random_data.tolist()}, f)
+            # make sure the shape of X is (32, 32, 3)
+            t = X**18
+            t = t.reshape(32, 32, 3).tolist()
+            dic = {"in": t}
             with open(data_path, "w") as f:
-                json.dump(X, f)
-
-
+                json.dump(dic, f)
 
             # create circuit_json and input_json based on keras2cirom
             # Assume that models_to_h5.ipynb already run and resnet.h5 is store in ../zkml/resnet20.h5
@@ -783,7 +791,7 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
 
             with open(input_path, "w") as f:
                 json.dump(final_json, f)
-                
+
             # print all keys circuit_json
             print("circuit_json keys:", circuit_json.keys())
             print("\n\n")
