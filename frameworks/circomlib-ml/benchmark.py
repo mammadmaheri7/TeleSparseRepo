@@ -701,6 +701,8 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
         scalar = 18
         h = 32
         nChannels = 3
+        # print shape of X
+        print("X shape:", X.shape)
         X_in = [[[int(X[i][j][0]*(10 ** scalar))] for j in range(h)] for i in range(h)]
         Input = [[[str(X_in[i][j][k] % p) for k in range(nChannels)] for j in range(h)] for i in range(h)]
         final_json["in"] = Input
