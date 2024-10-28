@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 const { execSync } = require('child_process');
-// Increase memory limit to 16 GB, adjust as needed
-const maxOldSpaceSize = 16384; 
+// Increase memory limit to 128 GB, adjust as needed
+const maxOldSpaceSize = 131072; 
 const snarkjsCommand = `node --max-old-space-size=${maxOldSpaceSize} $(which snarkjs) ${process.argv.slice(2).join(' ')}`;
 
 try {
