@@ -824,8 +824,8 @@ def benchmark_cnn(test_images, predictions, layers, model_name, tmp_folder, inpu
             
             if command == commands[1]:
                 time_prove = time.time() - start_time
-            # print ('command:', command)
-            # print (stdout)
+            print ('command:', command)
+            print (stdout)
             if "ERROR" in stdout:
                 print (stdout)
                 return
