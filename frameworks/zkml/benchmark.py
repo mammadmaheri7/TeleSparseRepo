@@ -174,7 +174,7 @@ try:
     import nvidia.dali.fn as fn
 except ImportError:
     print("ImportError: Please install DALI from https://www.github.com/NVIDIA/DALI to run this example.")
-    
+
 @pipeline_def
 def create_dali_pipeline(data_dir, crop, size, shard_id, num_shards, dali_cpu=False, is_training=True, testsize=-1, args=None):
     if testsize != -1:
@@ -235,7 +235,7 @@ def create_dali_pipeline(data_dir, crop, size, shard_id, num_shards, dali_cpu=Fa
 
 def get_trainval_imagenet_dali_loader(args, batchsize=32, crop_size=224, val_size=256):
     args.local_rank = 0
-    args.dali_cpu = False
+    args.dali_cpu = True
     args.world_size = 1
     args.workers = 1
     args.testsize = -1
