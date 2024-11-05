@@ -456,4 +456,4 @@ if __name__ == "__main__":
         predicted_labels = get_predictions(interpreter, tests)
 
 
-    benchmark(tests[start:start+args.size], predicted_labels[start:start+args.size], args.model, model_in_path, circuit_folder, save=args.save, notes = notes, labels=true_labels[start:start+args.size] if true_labels else None)
+    benchmark(tests[start:start+args.size], predicted_labels[start:start+args.size], args.model, model_in_path, circuit_folder, save=args.save, notes = notes, labels=true_labels[start:start+args.size] if true_labels is not None else None)
