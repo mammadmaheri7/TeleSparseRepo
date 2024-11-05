@@ -102,14 +102,20 @@ def dnn_datasets():
 
 def cnn_datasets(dataset_name=None):
     if dataset_name is not None and dataset_name == "cifar100":
+        cifar100_nm = [[0.5071,0.4867,0.4408],[0.2675,0.2565,0.2761]]
         # Load TensorFlow CIFAR100 data
         cifar100 = tf.keras.datasets.cifar100
         (train_images, train_labels), (test_images, test_labels) = cifar100.load_data()
         train_images_tf = train_images / 255.0
         test_images_tf = test_images / 255.0
+
+        # Normalize the images
+        train_images_tf = (train_images_tf - cifar100_nm[0]) / cifar100_nm[1]
+        test_images_tf = (test_images_tf - cifar100_nm[0]) / cifar100_nm[1]
+
         train_images_tf = train_images_tf.reshape(train_images.shape[0], 32, 32, 3)
         test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
-        return test_images_tf, test_images_tf
+        return test_images_tf, test_labels
     else:
         # Load TensorFlow MNIST data
         mnist = tf.keras.datasets.mnist
@@ -123,9 +129,9 @@ def cnn_datasets(dataset_name=None):
         train_images_tf_14 = tf.image.resize(train_images_tf, [14, 14]).numpy()
         test_images_tf_14 = tf.image.resize(test_images_tf, [14, 14]).numpy()
 
-        return test_images_tf, test_images_tf_14
+        return test_images_tf, test_labels
     
-def benchmark(test_images, predictions, model_name, model_in_path, circuit_folder, test = False, save = False, notes = ""):
+def benchmark(test_images, predictions, model_name, model_in_path, circuit_folder, test = False, save = False, notes = "",labels=None):
     # Convert the model
     tmp_folder = "./tmp/"
     msgpack_folder = tmp_folder + "msgpack/"
@@ -158,6 +164,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
 
     loss = 0
+    loss_with_true_label = 0
     img_inputs_path = tmp_folder + "inputs/"
     os.makedirs(img_inputs_path, exist_ok=True)
     
@@ -177,7 +184,11 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
     time_cost = []
     benchmark_start_time = time.time()
 
-    for i, img in enumerate(test_images):
+    # for i, img in enumerate(test_images):
+    for i in range(len(test_images)):
+        img = test_images[i]
+        label_img = labels[i]
+
         cost = 0
         print ("Process for image", i)
         start_time = time.time()
@@ -222,6 +233,10 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         if max_index != predictions[i]:
             loss += 1
             print ("Loss happens on index", i, "predicted_class", max_index)
+
+        if label_img is not None and max_index != label_img:
+            loss_with_true_label += 1
+            print ("Loss happens on index", i, "predicted_class", max_index, "true_label", label_img)
         
         mem_usage.append(cost)
         # time_cost.append(time.time() - start_time)
@@ -241,7 +256,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             '# Layers': [len(layers)-1],
             '# Parameters': [params[model_name]],
             'Testing Size': [len(mem_usage)],
-            'Accuracy Loss (%)': [loss/len(mem_usage) * 100],
+            'Accuracy Loss (%)': [loss/len(test_images) * 100],
+            'Acc@1' : [loss_with_true_label/len(test_images) * 100],
             'Avg Memory Usage (MB)': [sum(mem_usage) / len(mem_usage)],
             'Std Memory Usage': [pd.Series(mem_usage).std()],
             'Avg Proving Time (s)': [sum(time_cost) / len(time_cost)],
@@ -259,7 +275,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             '# Layers': [len(layers)],
             '# Parameters': [params[model_name]],
             'Testing Size': [len(mem_usage)],
-            'Accuracy Loss (%)': [loss/len(mem_usage) * 100],
+            'Accuracy Loss (%)': [loss/len(test_images) * 100],
+            'Acc@1' : [loss_with_true_label/len(test_images) * 100],
             'Avg Memory Usage (MB)': [sum(mem_usage) / len(mem_usage)],
             'Std Memory Usage': [pd.Series(mem_usage).std()],
             'Avg Proving Time (s)': [sum(time_cost) / len(time_cost)],
@@ -308,6 +325,28 @@ def show_models():
         print (f'model_name: {key} | arch: {arch}')
 
 
+import psutil
+def get_cpu_load():
+    # Get CPU usage for each core
+    cpu_loads = psutil.cpu_percent(interval=1, percpu=True)
+    return cpu_loads
+
+def select_k_cpus_with_lowest_load(k):
+    # Get CPU usage for each core
+    cpu_loads = get_cpu_load()
+    
+    # Create a list of tuples (core_id, load)
+    cpu_load_tuples = list(enumerate(cpu_loads))
+    
+    # Sort the list based on load
+    sorted_cpu_loads = sorted(cpu_load_tuples, key=lambda x: x[1])
+    
+    # Get the IDs of the K cores with lowest load
+    selected_cpus = [core[0] for core in sorted_cpu_loads[:k]]
+    
+    return selected_cpus
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate benchmark result for a given model and testsize.",
@@ -327,6 +366,9 @@ if __name__ == "__main__":
     # add argument for sparsity
     parser.add_argument('--sparsity', type=float, help='Sparsity of the model', default=0.0)
 
+    # number of cpu cores
+    parser.add_argument('--cores', type=int, help='Number of CPU cores to use', default=32)
+
 
     args = parser.parse_args()
 
@@ -340,6 +382,10 @@ if __name__ == "__main__":
     if args.model not in params:
         print ("Please check the model name by using '--list'")
         sys.exit()
+
+    # limit the number of cores
+    selected_cpus = select_k_cpus_with_lowest_load(args.cores)
+    print(f"Selected {args.cores} CPUs with lowest load:", selected_cpus)
 
     if args.model == "resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
@@ -376,7 +422,7 @@ if __name__ == "__main__":
         model_in_path = model_path + arch_folder + args.model + '.tflite'
         interpreter = tf.lite.Interpreter(model_path=model_in_path)
         interpreter.allocate_tensors()
-        tests, _ = cnn_datasets(dataset_name="cifar100")
+        tests, true_labels = cnn_datasets(dataset_name="cifar100")
         predicted_labels = get_predictions(interpreter, tests)
     elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
@@ -410,4 +456,4 @@ if __name__ == "__main__":
         predicted_labels = get_predictions(interpreter, tests)
 
 
-    benchmark(tests[start:start+args.size], predicted_labels[start:start+args.size], args.model, model_in_path, circuit_folder, save=args.save, notes = notes)
+    benchmark(tests[start:start+args.size], predicted_labels[start:start+args.size], args.model, model_in_path, circuit_folder, save=args.save, notes = notes, labels=true_labels[start:start+args.size] if true_labels else None)
