@@ -104,7 +104,7 @@ def dnn_datasets():
 
     return test_images_tf, test_images_tf_downsampled
 
-def cnn_datasets(dataset_name=None):
+def cnn_datasets(dataset_name=None,args=None):
     if dataset_name is not None and dataset_name == "cifar100":
         cifar100_nm = [[0.5071,0.4867,0.4408],[0.2675,0.2565,0.2761]]
         # Load TensorFlow CIFAR100 data
@@ -172,7 +172,9 @@ def get_trainval_imagenet_dali_loader(args, batchsize=32, crop_size=224, val_siz
     args.workers = 1
     args.testsize = -1
     args.val_testsize = -1 #args.calib_size
-    if args.imagenet_dir is None:
+    # if args.imagenet_dir is None:
+    # check if the args object has the attribute
+    if not hasattr(args, 'imagenet_dir'):
         args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
     traindir = os.path.join(args.imagenet_dir, 'train')
     
@@ -555,22 +557,22 @@ if __name__ == "__main__":
         circuit_folder = "./bin/"
 
     if args.model == "resnet20":
-        print(" MAKE SURE TO RUN models_to_h5.ipynb FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
+        print(" MAKE SURE TO RUN convert_onnx_to_tflite FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
         arch_folder = "resnet20/"
         os.makedirs(model_path + arch_folder, exist_ok=True)
         model_in_path = model_path + arch_folder + args.model + '.tflite'
         interpreter = tf.lite.Interpreter(model_path=model_in_path)
         interpreter.allocate_tensors()
-        tests, true_labels = cnn_datasets(dataset_name="cifar100")
+        tests, true_labels = cnn_datasets(dataset_name="cifar100",args=args)
         predicted_labels = get_predictions(interpreter, tests)
     elif args.model == "effnetb0":
-        print(" MAKE SURE TO RUN models_to_h5.ipynb FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
+        print(" MAKE SURE TO RUN convert_onnx_to_tflite FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
         arch_folder = "effnetb0/"
         os.makedirs(model_path + arch_folder, exist_ok=True)
         model_in_path = model_path + arch_folder + args.model + '.tflite'
         interpreter = tf.lite.Interpreter(model_path=model_in_path)
         interpreter.allocate_tensors()
-        tests, true_labels = cnn_datasets(dataset_name="imagenet")
+        tests, true_labels = cnn_datasets(dataset_name="imagenet",args=args)
         predicted_labels = get_predictions(interpreter, tests)
     elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
@@ -598,9 +600,9 @@ if __name__ == "__main__":
         interpreter.allocate_tensors()
 
         if layers[0] == 28:
-            tests, _ = cnn_datasets()
+            tests, _ = cnn_datasets(args=args)
         else:
-            _, tests = cnn_datasets()
+            _, tests = cnn_datasets(args=args)
         predicted_labels = get_predictions(interpreter, tests)
 
 
