@@ -165,6 +165,74 @@ def cnn_datasets(dataset_name=None,args=None):
 
         return test_images_tf, test_labels
 
+
+import os, glob
+try:
+    from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
+    from nvidia.dali.pipeline import pipeline_def
+    import nvidia.dali.types as types
+    import nvidia.dali.fn as fn
+except ImportError:
+    print("ImportError: Please install DALI from https://www.github.com/NVIDIA/DALI to run this example.")
+    
+@pipeline_def
+def create_dali_pipeline(data_dir, crop, size, shard_id, num_shards, dali_cpu=False, is_training=True, testsize=-1, args=None):
+    if testsize != -1:
+        labels = []
+        files = []
+        # import pdb; pdb.set_trace()
+        for i, l in enumerate(sorted(os.listdir(data_dir))):
+            ps = glob.glob(os.path.join(data_dir, l, "*.JPEG"))
+            files += ps
+            labels += [i] * len(ps)
+        labels = labels[::len(files) // testsize][:-1]
+        files = files[::len(files) // testsize][:-1]
+        print(is_training, len(files))
+        images, labels = fn.readers.file(files=files,
+                                        labels=labels,
+                                        shard_id=shard_id,
+                                        num_shards=num_shards,
+                                        random_shuffle=is_training,
+                                        pad_last_batch=True,
+                                        name="Reader")
+    else:
+        images, labels = fn.readers.file(file_root=data_dir,
+                                        shard_id=shard_id,
+                                        num_shards=num_shards,
+                                        random_shuffle=is_training,
+                                        pad_last_batch=True,
+                                        name="Reader")
+
+    dali_device = 'cpu' if dali_cpu else 'gpu'
+    decoder_device = 'cpu' if dali_cpu else 'mixed'
+    # ask nvJPEG to preallocate memory for the biggest sample in ImageNet for CPU and GPU to avoid reallocations in runtime
+    device_memory_padding = 211025920 if decoder_device == 'mixed' else 0
+    host_memory_padding = 140544512 if decoder_device == 'mixed' else 0
+    # ask HW NVJPEG to allocate memory ahead for the biggest image in  the data set to avoid reallocations in runtime
+    preallocate_width_hint = 5980 if decoder_device == 'mixed' else 0
+    preallocate_height_hint = 6430 if decoder_device == 'mixed' else 0
+    images = fn.decoders.image(images,
+                                   device=decoder_device,
+                                   output_type=types.RGB)
+    images = fn.resize(images,
+                        device=dali_device,
+                        size=size,
+                        mode="not_smaller",
+                        interp_type=types.INTERP_CUBIC)
+    # images = fn.jitter(images, 
+    #                    interp_type=types.INTERP_CUBIC)
+
+    images = fn.crop_mirror_normalize(images.gpu(),
+                                      dtype=types.FLOAT,
+                                      output_layout="CHW",
+                                      crop=(crop, crop),
+                                      mean=[d * 255 for d in args.mean],
+                                      std=[d * 255 for d in args.std],
+                                      mirror=False)
+    labels = labels.cpu()
+    return images, labels
+
+
 def get_trainval_imagenet_dali_loader(args, batchsize=32, crop_size=224, val_size=256):
     args.local_rank = 0
     args.dali_cpu = False
