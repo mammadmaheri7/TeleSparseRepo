@@ -332,9 +332,19 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         proof_path = "./proof"
         proof_size.append(os.path.getsize(proof_path) / 1024)
 
-        print("start stdout")
-        print(stdout)
-        print("=====================================")
+        # print("start stdout")
+        # print(stdout)
+        # print("=====================================")
+
+        # log stdout to log file
+        # mkdir logs if not exist
+        os.mkdir('./logs') if not os.path.exists('./logs') else None
+        with open(f'./logs/{model_name}_log.txt', 'a') as f:
+            f.write(f"Image {i}:\n")
+            f.write(stdout)
+            f.write("\n\n\n\n")
+
+
 
     print ("Total time:", time.time() - benchmark_start_time)
 
