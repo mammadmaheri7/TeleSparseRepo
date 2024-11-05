@@ -413,7 +413,7 @@ if __name__ == "__main__":
     else:
         dnn = False
 
-    if args.arm:i
+    if args.arm:
         # circuit_folder = "./bin/m1_mac/arm_64/"
         circuit_folder = "./bin/m1_mac/"
     else:
