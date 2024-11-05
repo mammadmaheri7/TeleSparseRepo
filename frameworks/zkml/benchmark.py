@@ -11,6 +11,8 @@ params = {"784_56_10": 44543,
             "14_5_11_80_10_3": 4966, # @TODO: May doublecheck
             "28_6_16_120_84_10_5": 44530,
             "resnet20": (-1),
+            "effnetb0": (-1)
+
             }
          
 
@@ -24,7 +26,9 @@ accuracys = {"784_56_10": 0.9740,
 arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "14_5_11_80_10_3": "input-conv2d-conv2d-dense-dense/",
                 "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
-                "resnet20": "resnet20/"}
+                "resnet20": "resnet20/",
+                "effnetb0": "effnetb0/",
+                }
 
 def get_predictions(interpreter, test_images):
     predictions = []
@@ -116,6 +120,36 @@ def cnn_datasets(dataset_name=None):
         train_images_tf = train_images_tf.reshape(train_images.shape[0], 32, 32, 3)
         test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
         return test_images_tf, test_labels
+    elif dataset_name is not None and dataset_name == "imagenet":
+        from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+        # if any(st in model for st in ["vit", "deit"]):
+        #     args.mean = [0.5,] * 3
+        #     args.std = [0.5,] * 3
+        # else:
+        args.mean = IMAGENET_DEFAULT_MEAN
+        args.std = IMAGENET_DEFAULT_STD
+        # if "384" in model:
+        #     train_loader,test_loader = get_trainval_imagenet_dali_loader(args, batch_size, 384, 384)
+        #     calib_loader = get_calib_imagenet_dali_loader(args, batch_size, 384, 384, calib_size=args.calib_size)
+        # else:
+        train_loader,test_loader = get_trainval_imagenet_dali_loader(args, 32)
+        # select N images as test set
+        N = 2048
+        test_images = []
+        test_labels = []
+        for i, (images, labels) in enumerate(test_loader):
+            test_images.append(images.numpy())
+            test_labels.append(labels.numpy())
+            if i >= N:
+                break
+        test_images = np.concatenate(test_images, axis=0)
+        test_labels = np.concatenate(test_labels, axis=0)
+        test_images = test_images[:N]
+        test_labels = test_labels[:N]
+        return test_images, test_labels
+        
+        # calib_loader = get_calib_imagenet_dali_loader(args, batch_size, calib_size=args.calib_size)
+
     else:
         # Load TensorFlow MNIST data
         mnist = tf.keras.datasets.mnist
@@ -130,7 +164,37 @@ def cnn_datasets(dataset_name=None):
         test_images_tf_14 = tf.image.resize(test_images_tf, [14, 14]).numpy()
 
         return test_images_tf, test_labels
+
+def get_trainval_imagenet_dali_loader(args, batchsize=32, crop_size=224, val_size=256):
+    args.local_rank = 0
+    args.dali_cpu = False
+    args.world_size = 1
+    args.workers = 1
+    args.testsize = -1
+    args.val_testsize = -1 #args.calib_size
+    if args.imagenet_dir is None:
+        args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
+    traindir = os.path.join(args.imagenet_dir, 'train')
     
+    pipe = create_dali_pipeline(batch_size=batchsize,
+                                num_threads=args.workers,
+                                device_id=args.local_rank,
+                                seed=12 + args.local_rank,
+                                data_dir=traindir,
+                                crop=crop_size,
+                                size=val_size,
+                                dali_cpu=args.dali_cpu,
+                                shard_id=args.local_rank,
+                                num_shards=args.world_size,
+                                is_training=True,
+                                testsize=args.testsize,
+                                args=args)
+    pipe.build()
+    train_loader = DALIClassificationIterator(pipe, reader_name="Reader", last_batch_policy=LastBatchPolicy.PARTIAL)
+    val_loader = get_val_imagenet_dali_loader(args, batchsize, crop_size, val_size)
+    return train_loader, val_loader
+
+
 def benchmark(test_images, predictions, model_name, model_in_path, circuit_folder, test = False, save = False, notes = "",labels=None):
     # Convert the model
     tmp_folder = "./tmp/"
@@ -142,6 +206,11 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
     config_path = tmp_folder + "msgpack/config.msgpack"
 
     if model_name == "resnet20":
+        scale_factor = (2**12)
+        k = 21
+        num_cols = 32
+        num_randoms = 1024 * 32
+    elif model_name == "effnetb0":
         scale_factor = (2**12)
         k = 21
         num_cols = 32
@@ -234,7 +303,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
         else:
             print("Verification time not found.")
-            return
+            # return
 
 
         # Extract x values using regex
@@ -272,6 +341,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
     if model_name=="resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
         layers = [str(x) for x in layers]
+    elif model_name=="effnetb0":
+        layers = ["11","11","11"]
     else:
         layers = model_name.split("_")
 
@@ -445,6 +516,8 @@ if __name__ == "__main__":
 
     if args.model == "resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
+    elif args.model == "effnetb0":
+        layers = [11, 11, 11]
     else:
         layers = [int(x) for x in args.model.split("_")]
     model_path = "../../models/"
@@ -458,7 +531,7 @@ if __name__ == "__main__":
         start = args.agg
         notes = f'start from {start}'
 
-    if args.model == "resnet20":
+    if args.model == "resnet20" or args.model == "effnetb0":
         cnn = True
     elif layers[0] > 30:
         dnn = True
@@ -479,6 +552,15 @@ if __name__ == "__main__":
         interpreter = tf.lite.Interpreter(model_path=model_in_path)
         interpreter.allocate_tensors()
         tests, true_labels = cnn_datasets(dataset_name="cifar100")
+        predicted_labels = get_predictions(interpreter, tests)
+    elif args.model == "effnetb0":
+        print(" MAKE SURE TO RUN models_to_h5.ipynb FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
+        arch_folder = "effnetb0/"
+        os.makedirs(model_path + arch_folder, exist_ok=True)
+        model_in_path = model_path + arch_folder + args.model + '.tflite'
+        interpreter = tf.lite.Interpreter(model_path=model_in_path)
+        interpreter.allocate_tensors()
+        tests, true_labels = cnn_datasets(dataset_name="imagenet")
         predicted_labels = get_predictions(interpreter, tests)
     elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
