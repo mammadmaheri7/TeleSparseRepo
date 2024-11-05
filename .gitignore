@@ -40,3 +40,4 @@ frameworks/zkml/.DS_Store
 frameworks/circomlib-ml/golden_circuits/resnet20.circom
 *.circom
 frameworks/circomlib-ml/golden_circuits/not support/*
+frameworks/zkml/data/*
