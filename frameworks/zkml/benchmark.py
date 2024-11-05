@@ -294,12 +294,12 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             return
 
         # Extract the verification time from the output
-        verification_time_pattern = r"Verification time: ([\d\.]+)s"
+        verification_time_pattern = r"Verifying time: ([\d\.]+)ms"
         # Search for the pattern in the text
         match = re.search(verification_time_pattern, stdout)
         if match:
             verification_time = match.group(1)
-            print(f"Verification time: {verification_time} seconds")
+            print(f"Verification time: {verification_time} ms")
 
         else:
             print("Verification time not found.")
@@ -365,8 +365,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             'Std Proving Time': [pd.Series(time_cost).std()],
             'Proof Size (KB)': [sum(proof_size) / len(proof_size)],
             'Std Proof Size (KB)': [pd.Series(proof_size).std()],
-            'Verification Time (s)': [sum([float(x) for x in verification_times]) / len(verification_times)],
-            'Std Verification Time (s)': [pd.Series([float(x) for x in verification_times]).std()],
+            'Verification Time (ms)': [sum([float(x) for x in verification_times]) / len(verification_times)],
+            'Std Verification Time (ms)': [pd.Series([float(x) for x in verification_times]).std()],
             'Notes': notes
         }
         # arch = f'{arch_folder} ({"x".join(layers)})'
@@ -388,8 +388,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             'Std Proving Time': [pd.Series(time_cost).std()],
             'Proof Size (KB)': [sum(proof_size) / len(proof_size)],
             'Std Proof Size (KB)': [pd.Series(proof_size).std()],
-            'Verification Time (s)': [sum([float(x) for x in verification_times]) / len(verification_times)],
-            'Std Verification Time (s)': [pd.Series([float(x) for x in verification_times]).std()],
+            'Verification Time (ms)': [sum([float(x) for x in verification_times]) / len(verification_times)],
+            'Std Verification Time (ms)': [pd.Series([float(x) for x in verification_times]).std()],
             'Notes': notes
         }
 
