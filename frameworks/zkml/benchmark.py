@@ -182,6 +182,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
     mem_usage = []
     time_cost = []
+    proof_size = []
+    verification_times = []
     benchmark_start_time = time.time()
 
     # for i, img in enumerate(test_images):
@@ -217,8 +219,23 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         if match:
             proving_time = match.group(1)
             print(f"Proving time: {proving_time} seconds")
+            verification_times.append(proving_time)
         else:
-            print("Proving time not found.")  
+            print("Proving time not found.") 
+            return
+
+        # Extract the verification time from the output
+        verification_time_pattern = r"Verification time: ([\d\.]+)s"
+        # Search for the pattern in the text
+        match = re.search(verification_time_pattern, stdout)
+        if match:
+            verification_time = match.group(1)
+            print(f"Verification time: {verification_time} seconds")
+
+        else:
+            print("Verification time not found.")
+            return
+
 
         # Extract x values using regex
         x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (-?\d+) \(', stdout)][-10:]
@@ -232,7 +249,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         
         if max_index != predictions[i]:
             loss += 1
-            print ("Loss happens on index", i, "predicted_class", max_index)
+            print ("Loss happens on index", i, "predicted_class", max_index, "predicted_tflite", predictions[i])
 
         if label_img is not None and max_index != label_img:
             loss_with_true_label += 1
@@ -241,6 +258,14 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         mem_usage.append(cost)
         # time_cost.append(time.time() - start_time)
         time_cost.append(float(proving_time))
+        
+        # compute proof size
+        proof_path = "./proof"
+        proof_size.append(os.path.getsize(proof_path) / 1024)
+
+        print("start stdout")
+        print(stdout)
+        print("=====================================")
 
     print ("Total time:", time.time() - benchmark_start_time)
 
@@ -266,6 +291,10 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             'Std Memory Usage': [pd.Series(mem_usage).std()],
             'Avg Proving Time (s)': [sum(time_cost) / len(time_cost)],
             'Std Proving Time': [pd.Series(time_cost).std()],
+            'Proof Size (KB)': [sum(proof_size) / len(proof_size)],
+            'Std Proof Size (KB)': [pd.Series(proof_size).std()],
+            'Verification Time (s)': [sum([float(x) for x in verification_times]) / len(verification_times)],
+            'Std Verification Time (s)': [pd.Series([float(x) for x in verification_times]).std()],
             'Notes': notes
         }
         # arch = f'{arch_folder} ({"x".join(layers)})'
@@ -285,6 +314,10 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             'Std Memory Usage': [pd.Series(mem_usage).std()],
             'Avg Proving Time (s)': [sum(time_cost) / len(time_cost)],
             'Std Proving Time': [pd.Series(time_cost).std()],
+            'Proof Size (KB)': [sum(proof_size) / len(proof_size)],
+            'Std Proof Size (KB)': [pd.Series(proof_size).std()],
+            'Verification Time (s)': [sum([float(x) for x in verification_times]) / len(verification_times)],
+            'Std Verification Time (s)': [pd.Series([float(x) for x in verification_times]).std()],
             'Notes': notes
         }
 
@@ -302,8 +335,10 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 def load_csv():
     csv_path = '../../benchmarks/benchmark_results.csv'
 
-    columns = ['Framework', 'Architecture', '# Layers', '# Parameters', 'Testing Size', 'Accuracy Loss (%)', 
-            'Avg Memory Usage (MB)', 'Std Memory Usage', 'Avg Proving Time (s)', 'Std Proving Time']
+    columns = ['Framework', 'Architecture', '# Layers', '# Parameters', 'Testing Size', 'Accuracy Loss (%)', 'Acc@1 (%)', 
+            'Avg Memory Usage (MB)', 'Std Memory Usage', 'Avg Proving Time (s)', 'Std Proving Time' , 
+            'Proof Size (KB)', 'Std Proof Size (KB)', 'Verification Time (s)', 'Std Verification Time (s)',
+            'Notes']
 
     # Check if the CSV file exists
     if not os.path.isfile(csv_path):
@@ -351,6 +386,19 @@ def select_k_cpus_with_lowest_load(k):
     return selected_cpus
 
 
+def set_cpu_affinity(pid, cpu_list):
+    try:
+        p = psutil.Process(pid)
+        p.cpu_affinity(cpu_list)
+        print(f"CPU affinity for process {pid} set to: {cpu_list}")
+    except psutil.NoSuchProcess:
+        print(f"Process with PID {pid} does not exist.")
+    except psutil.AccessDenied:
+        print("Permission denied. You may need sudo privileges to set CPU affinity.")
+
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate benchmark result for a given model and testsize.",
@@ -390,6 +438,9 @@ if __name__ == "__main__":
     # limit the number of cores
     selected_cpus = select_k_cpus_with_lowest_load(args.cores)
     print(f"Selected {args.cores} CPUs with lowest load:", selected_cpus)
+    # Get the process ID of the current process
+    pid = os.getpid()
+    set_cpu_affinity(pid, selected_cpus)
 
     if args.model == "resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
