@@ -271,6 +271,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
     if model_name=="resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
+        layers = [str(x) for x in layers]
     else:
         layers = model_name.split("_")
 
