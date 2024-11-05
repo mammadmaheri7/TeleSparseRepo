@@ -243,7 +243,11 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         time_cost.append(float(proving_time))
 
     print ("Total time:", time.time() - benchmark_start_time)
-    layers = model_name.split("_")
+
+    if model_name=="resnet20":
+        layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
+    else:
+        layers = model_name.split("_")
 
     if int(layers[0]) < 30:
         arch = arch_folders[model_name][:-1]
@@ -409,7 +413,7 @@ if __name__ == "__main__":
     else:
         dnn = False
 
-    if args.arm:
+    if args.arm:i
         # circuit_folder = "./bin/m1_mac/arm_64/"
         circuit_folder = "./bin/m1_mac/"
     else:
