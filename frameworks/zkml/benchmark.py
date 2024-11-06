@@ -11,7 +11,7 @@ params = {"784_56_10": 44543,
             "14_5_11_80_10_3": 4966, # @TODO: May doublecheck
             "28_6_16_120_84_10_5": 44530,
             "resnet20": (-1),
-            "effnetb0": (-1)
+            "efficientnetb0": (-1)
 
             }
          
@@ -27,7 +27,7 @@ arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "14_5_11_80_10_3": "input-conv2d-conv2d-dense-dense/",
                 "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
                 "resnet20": "resnet20/",
-                "effnetb0": "effnetb0/",
+                "efficientnetb0": "efficientnetb0/",
                 }
 
 def get_predictions(interpreter, test_images):
@@ -280,7 +280,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         k = 21
         num_cols = 32
         num_randoms = 1024 * 32
-    elif model_name == "effnetb0":
+    elif model_name == "efficientnetb0":
         scale_factor = (2**12)
         k = 23
         num_cols = 256
@@ -421,7 +421,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
     if model_name=="resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
         layers = [str(x) for x in layers]
-    elif model_name=="effnetb0":
+    elif model_name=="efficientnetb0":
         layers = ["11","11","11"]
     else:
         layers = model_name.split("_")
@@ -596,7 +596,7 @@ if __name__ == "__main__":
 
     if args.model == "resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
-    elif args.model == "effnetb0":
+    elif args.model == "efficientnetb0":
         layers = [11, 11, 11]
     else:
         layers = [int(x) for x in args.model.split("_")]
@@ -611,7 +611,7 @@ if __name__ == "__main__":
         start = args.agg
         notes = f'start from {start}'
 
-    if args.model == "resnet20" or args.model == "effnetb0":
+    if args.model == "resnet20" or args.model == "efficientnetb0":
         cnn = True
     elif layers[0] > 30:
         dnn = True
@@ -633,9 +633,9 @@ if __name__ == "__main__":
         interpreter.allocate_tensors()
         tests, true_labels = cnn_datasets(dataset_name="cifar100",args=args)
         predicted_labels = get_predictions(interpreter, tests)
-    elif args.model == "effnetb0":
+    elif args.model == "efficientnetb0":
         print(" MAKE SURE TO RUN convert_onnx_to_tflite FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
-        arch_folder = "effnetb0/"
+        arch_folder = "efficientnetb0/"
         os.makedirs(model_path + arch_folder, exist_ok=True)
         model_in_path = model_path + arch_folder + args.model + '.tflite'
         interpreter = tf.lite.Interpreter(model_path=model_in_path)
