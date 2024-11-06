@@ -416,7 +416,12 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
     # for i, img in enumerate(test_images):
     for i in range(len(test_images)):
         img = test_images[i]
-        label_img = labels[i][0]
+        # label_img = labels[i][0]
+
+        try:
+            label_img = labels[i][0]
+        except:
+            label_img = labels[i]
 
         cost = 0
         print ("Process for image", i)
