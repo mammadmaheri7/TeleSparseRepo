@@ -420,6 +420,14 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
                 "--inputs", img_in_path, "--output", img_out_path]
         # print (command_1)
         command_2 = [call_path, model_out_path, img_out_path, "kzg"]
+
+        # log stdout to log file
+        os.mkdir('./logs') if not os.path.exists('./logs') else None
+        with open(f'./logs/{model_name}_log.txt', 'a') as f:
+            f.write(f"Image {i}:\n")
+            f.write(stdout)
+            f.write("\n\n\n\n")
+        
         # print (command_2)
         _, _, usage = execute_and_monitor(command_1)
         cost += usage
@@ -480,14 +488,6 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         # print("start stdout")
         # print(stdout)
         # print("=====================================")
-
-        # log stdout to log file
-        # mkdir logs if not exist
-        os.mkdir('./logs') if not os.path.exists('./logs') else None
-        with open(f'./logs/{model_name}_log.txt', 'a') as f:
-            f.write(f"Image {i}:\n")
-            f.write(stdout)
-            f.write("\n\n\n\n")
 
 
 
