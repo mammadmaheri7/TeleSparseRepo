@@ -726,6 +726,9 @@ if __name__ == "__main__":
         interpreter.allocate_tensors()
         tests, true_labels = cnn_datasets(dataset_name="cifar100",args=args)
         predicted_labels = get_predictions(interpreter, tests)
+        # calculate accuracy between predicted_labels and true_labels
+        accuracy = sum([1 for i in range(len(predicted_labels)) if predicted_labels[i] == true_labels[i][0]]) / len(predicted_labels)
+        print(f"Accuracy between the true labels and tflite model is: {accuracy}")
     elif args.model == "efficientnetb0":
         print(" MAKE SURE TO RUN convert_onnx_to_tflite FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
         arch_folder = "efficientnetb0/"
