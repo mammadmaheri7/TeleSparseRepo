@@ -112,14 +112,16 @@ def cnn_datasets(dataset_name=None,args=None):
         # Load TensorFlow CIFAR100 data
         cifar100 = tf.keras.datasets.cifar100
         (train_images, train_labels), (test_images, test_labels) = cifar100.load_data()
-        train_images_tf = train_images / 255.0
-        test_images_tf = test_images / 255.0
+        train_images_tf = train_images.astype('float32') / 255.0
+        test_images_tf = test_images.astype('float32') / 255.0
+
+        test_labels = test_labels.astype('int32')
 
         # Normalize the images
-        train_images_tf = (train_images_tf - cifar100_nm[1]) / cifar100_nm[0]
+        # train_images_tf = (train_images_tf - cifar100_nm[1]) / cifar100_nm[0]
         test_images_tf = (test_images_tf - cifar100_nm[1]) / cifar100_nm[0]
 
-        train_images_tf = train_images_tf.reshape(train_images.shape[0], 32, 32, 3)
+        # train_images_tf = train_images_tf.reshape(train_images.shape[0], 32, 32, 3)
         test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
         return test_images_tf, test_labels
     elif dataset_name is not None and dataset_name == "imagenet":
@@ -460,7 +462,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
 
         # Extract x values using regex
-        x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (-?\d+) \(', stdout)][-10:]
+        x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (-?\d+) \(', stdout)]
         #x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (\d+)', stdout)][-10:]
         #print (x_values)
 
