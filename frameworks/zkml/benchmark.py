@@ -433,6 +433,12 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
                 "--inputs", img_in_path, "--output", img_out_path]
         # print (command_1)
         command_2 = [call_path, model_out_path, img_out_path, "kzg"]
+        
+        # print (command_2)
+        _, _, usage = execute_and_monitor(command_1)
+        cost += usage
+        stdout, _, usage = execute_and_monitor(command_2)
+        cost += usage
 
         # log stdout to log file
         os.mkdir('./logs') if not os.path.exists('./logs') else None
@@ -440,12 +446,6 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             f.write(f"Image {i}:\n")
             f.write(stdout)
             f.write("\n\n\n\n")
-        
-        # print (command_2)
-        _, _, usage = execute_and_monitor(command_1)
-        cost += usage
-        stdout, _, usage = execute_and_monitor(command_2)
-        cost += usage
 
         # Extract the proving time from the output
         proving_time_pattern = r"Proving time: ([\d\.]+)s"
