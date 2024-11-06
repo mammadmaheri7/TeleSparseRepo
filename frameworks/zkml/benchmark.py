@@ -123,6 +123,12 @@ def cnn_datasets(dataset_name=None,args=None):
 
         # train_images_tf = train_images_tf.reshape(train_images.shape[0], 32, 32, 3)
         test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
+
+        # shuffle the test images and corresponding labels
+        indices = np.random.permutation(test_images_tf.shape[0])
+        test_images_tf = test_images_tf[indices]
+        test_labels = test_labels[indices]
+
         return test_images_tf, test_labels
     elif dataset_name is not None and dataset_name == "imagenet":
         # from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
@@ -195,6 +201,11 @@ def cnn_datasets(dataset_name=None,args=None):
         # all_labels_one_hot = tf.keras.utils.to_categorical(all_labels, num_classes=1000)
         # sampled_images, sampled_labels_one_hot = all_images[0:N] , all_labels_one_hot[0:N]
         sampled_images, sampled_labels = all_images[0:N], all_labels[0:N]
+
+        # shuffle the test images and corresponding labels
+        indices = np.random.permutation(sampled_images.shape[0])
+        sampled_images = sampled_images[indices]
+        sampled_labels = sampled_labels[indices]
 
         return sampled_images, sampled_labels
 
