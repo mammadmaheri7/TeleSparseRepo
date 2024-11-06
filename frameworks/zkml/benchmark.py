@@ -461,7 +461,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
             '# Parameters': [params[model_name]],
             'Testing Size': [len(mem_usage)],
             'Accuracy Loss (%)': [loss/len(test_images) * 100],
-            'Acc@1' : [loss_with_true_label/len(test_images) * 100],
+            'Acc@1 (%)' : [loss_with_true_label/len(test_images) * 100],
             'Avg Memory Usage (MB)': [sum(mem_usage) / len(mem_usage)],
             'Std Memory Usage': [pd.Series(mem_usage).std()],
             'Avg Proving Time (s)': [sum(time_cost) / len(time_cost)],
@@ -488,8 +488,8 @@ def load_csv():
     csv_path = '../../benchmarks/benchmark_results.csv'
 
     columns = ['Framework', 'Architecture', '# Layers', '# Parameters', 'Testing Size', 'Accuracy Loss (%)', 'Acc@1 (%)', 
-            'Avg Memory Usage (MB)', 'Std Memory Usage', 'Avg Proving Time (s)', 'Std Proving Time' , 
-            'Proof Size (KB)', 'Std Proof Size (KB)', 'Verification Time (s)', 'Std Verification Time (s)',
+            'Avg Memory Usage (MB)', 'Std Memory Usage', 'Verification Time (ms)', 'Std Proving Time' , 
+            'Proof Size (KB)', 'Std Proof Size (KB)', 'Verification Time (s)', 'Std Verification Time (ms)',
             'Notes']
 
     # Check if the CSV file exists
