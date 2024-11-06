@@ -203,9 +203,9 @@ def cnn_datasets(dataset_name=None,args=None):
         sampled_images, sampled_labels = all_images[0:N], all_labels[0:N]
 
         # shuffle the test images and corresponding labels
-        indices = np.random.permutation(sampled_images.shape[0])
-        sampled_images = sampled_images[indices]
-        sampled_labels = sampled_labels[indices]
+        indices = tf.convert_to_tensor(np.random.permutation(sampled_images.shape[0]), dtype=tf.int32)
+        sampled_images = tf.gather(sampled_images, indices)
+        sampled_labels = tf.gather(sampled_labels, indices)
 
         return sampled_images, sampled_labels
 
