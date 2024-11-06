@@ -3,6 +3,8 @@ import re, os, argparse, sys
 import tensorflow as tf
 import concurrent.futures, subprocess, threading, psutil, time
 import pandas as pd
+from tensorflow.keras.preprocessing import image_dataset_from_directory
+from tensorflow.keras.applications.efficientnet import preprocess_input, decode_predictions
 
 params = {"784_56_10": 44543,
           "196_25_10": 5185,
@@ -121,40 +123,78 @@ def cnn_datasets(dataset_name=None,args=None):
         test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
         return test_images_tf, test_labels
     elif dataset_name is not None and dataset_name == "imagenet":
-        from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-        # if any(st in model for st in ["vit", "deit"]):
-        #     args.mean = [0.5,] * 3
-        #     args.std = [0.5,] * 3
-        # else:
-        args.mean = IMAGENET_DEFAULT_MEAN
-        args.std = IMAGENET_DEFAULT_STD
-        # if "384" in model:
-        #     train_loader,test_loader = get_trainval_imagenet_dali_loader(args, batch_size, 384, 384)
-        #     calib_loader = get_calib_imagenet_dali_loader(args, batch_size, 384, 384, calib_size=args.calib_size)
-        # else:
-        train_loader,test_loader = get_trainval_imagenet_dali_loader(args, 32)
-        # select N images as test set
+        # from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+        # # if any(st in model for st in ["vit", "deit"]):
+        # #     args.mean = [0.5,] * 3
+        # #     args.std = [0.5,] * 3
+        # # else:
+        # args.mean = IMAGENET_DEFAULT_MEAN
+        # args.std = IMAGENET_DEFAULT_STD
+        # # if "384" in model:
+        # #     train_loader,test_loader = get_trainval_imagenet_dali_loader(args, batch_size, 384, 384)
+        # #     calib_loader = get_calib_imagenet_dali_loader(args, batch_size, 384, 384, calib_size=args.calib_size)
+        # # else:
+        # train_loader,test_loader = get_trainval_imagenet_dali_loader(args, 32)
+        # # select N images as test set
+        # N = 128
+        # test_images = []
+        # test_labels = []
+        # for i, batch in enumerate(test_loader):
+            
+        #     images = batch[0]["data"]
+        #     labels = batch[0]["label"]
+            
+        #     test_images.append(images.numpy())
+        #     test_labels.append(labels.numpy())
+        #     if i >= N:
+        #         break
+        # test_images = np.concatenate(test_images, axis=0)
+        # test_labels = np.concatenate(test_labels, axis=0)
+        # test_images = test_images[:N]
+        # test_labels = test_labels[:N]
+        # # reshape to batchsize,224,224,3
+        # test_images = test_images.reshape(N, 224, 224, 3)
+        # return test_images, test_labels
+
+        # IMPORTANT: THIS CODE PREPARE IMAGENET FOR EFFICIENTNETB0 of "TFLITE" - DON'T USE SAME PREPROCESSING FOR EZKL (PYTORCH MODELS)
+        if not hasattr(args, 'imagenet_dir'):
+            args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
+        imagenet_test_dir = os.path.join(args.imagenet_dir, 'val')
+
+        batch_size = 32  
+        img_size = (224, 224)
         N = 128
-        test_images = []
-        test_labels = []
-        for i, batch in enumerate(test_loader):
-            
-            images = batch[0]["data"]
-            labels = batch[0]["label"]
-            
-            test_images.append(images.numpy())
-            test_labels.append(labels.numpy())
-            if i >= N:
-                break
-        test_images = np.concatenate(test_images, axis=0)
-        test_labels = np.concatenate(test_labels, axis=0)
-        test_images = test_images[:N]
-        test_labels = test_labels[:N]
-        # reshape to batchsize,224,224,3
-        test_images = test_images.reshape(N, 224, 224, 3)
-        return test_images, test_labels
-        
-        # calib_loader = get_calib_imagenet_dali_loader(args, batch_size, calib_size=args.calib_size)
+
+        test_dataset = image_dataset_from_directory(
+            imagenet_test_dir,
+            labels="inferred",
+            label_mode="int",
+            batch_size=batch_size,
+            image_size=img_size
+        )
+
+        # Preprocessing: EfficientNet requires special input preprocessing
+        def preprocess(image, label):
+            image = preprocess_input(image)
+            return image, label
+
+        # sampled_images, sampled_labels = next(iter(test_dataset))
+        all_images = []
+        all_labels = []
+
+        # Iterate over the entire test dataset
+        for images, labels in test_dataset:
+            all_images.append(images)
+            all_labels.append(labels)
+
+        # Concatenate all images and labels
+        all_images = tf.concat(all_images, axis=0)
+        all_labels = tf.concat(all_labels, axis=0)
+        # all_labels_one_hot = tf.keras.utils.to_categorical(all_labels, num_classes=1000)
+        # sampled_images, sampled_labels_one_hot = all_images[0:N] , all_labels_one_hot[0:N]
+        sampled_images, sampled_labels = all_images[0:N], all_labels[0:N]
+
+        return sampled_images, sampled_labels
 
     else:
         # Load TensorFlow MNIST data
