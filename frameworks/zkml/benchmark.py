@@ -251,22 +251,24 @@ def get_trainval_imagenet_dali_loader(args, batchsize=32, crop_size=224, val_siz
     if not hasattr(args, 'imagenet_dir'):
         args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
     traindir = os.path.join(args.imagenet_dir, 'train')
-    
-    pipe = create_dali_pipeline(batch_size=batchsize,
-                                num_threads=args.workers,
-                                device_id=None,
-                                seed=12 + args.local_rank,
-                                data_dir=traindir,
-                                crop=crop_size,
-                                size=val_size,
-                                dali_cpu=True,
-                                shard_id=args.local_rank,
-                                num_shards=args.world_size,
-                                is_training=True,
-                                testsize=args.testsize,
-                                args=args)
-    pipe.build()
-    train_loader = DALIClassificationIterator(pipe, reader_name="Reader", last_batch_policy=LastBatchPolicy.PARTIAL)
+
+    train_loader = None
+    if not args.ignore_train_loader:
+        pipe = create_dali_pipeline(batch_size=batchsize,
+                                    num_threads=args.workers,
+                                    device_id=None,
+                                    seed=12 + args.local_rank,
+                                    data_dir=traindir,
+                                    crop=crop_size,
+                                    size=val_size,
+                                    dali_cpu=True,
+                                    shard_id=args.local_rank,
+                                    num_shards=args.world_size,
+                                    is_training=True,
+                                    testsize=args.testsize,
+                                    args=args)
+        pipe.build()
+        train_loader = DALIClassificationIterator(pipe, reader_name="Reader", last_batch_policy=LastBatchPolicy.PARTIAL)
     val_loader = get_val_imagenet_dali_loader(args, batchsize, crop_size, val_size)
     return train_loader, val_loader
 
