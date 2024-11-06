@@ -473,7 +473,12 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
 
         # Extract x values using regex
-        x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (-?\d+) \(', stdout)]
+        num_class_dict = {
+            "resnet20": 100,
+            "efficientnetb0": 1000,
+        }
+        num_class = num_class_dict[model_name]
+        x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (-?\d+) \(', stdout)][(-1*num_class):]
         #x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (\d+)', stdout)][-10:]
         #print (x_values)
 
