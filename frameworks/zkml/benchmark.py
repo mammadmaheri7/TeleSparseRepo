@@ -282,9 +282,9 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         num_randoms = 1024 * 32
     elif model_name == "effnetb0":
         scale_factor = (2**12)
-        k = 21
-        num_cols = 32
-        num_randoms = 1024 * 32
+        k = 23
+        num_cols = 256
+        num_randoms = 1024 * 2048
     else:
         scale_factor = (2**12)
         k = 18
