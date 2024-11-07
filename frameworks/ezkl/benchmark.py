@@ -829,7 +829,7 @@ if __name__ == "__main__":
         dataset_name = "cifar100"
         onnx_path += f"_{dataset_name}"
         if args.sparsity > 0.0:
-            onnx_path += f"_sparsity{str(int(args.sparsity))}"
+            onnx_path += f"_sparse{str(int(args.sparsity))}"
         if args.teleported:
             onnx_path += "_teleported"
         onnx_path += ".onnx"
