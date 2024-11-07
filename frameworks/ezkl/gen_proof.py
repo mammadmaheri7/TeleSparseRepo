@@ -123,6 +123,9 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
     #print(proof)
     assert os.path.isfile(proof_path)
 
+    command = f"ezkl verify --settings-path {settings_path} --proof-path {proof_path} --vk-path {vk_path}"
+    os.system(command)
+
     return pred
 
 

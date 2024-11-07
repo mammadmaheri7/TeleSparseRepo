@@ -37,6 +37,31 @@ arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
                 "resnet20": "resnet20/"}
 
+def select_k_cpus_with_lowest_load(k):
+    # Get CPU usage for each core
+    cpu_loads = get_cpu_load()
+    
+    # Create a list of tuples (core_id, load)
+    cpu_load_tuples = list(enumerate(cpu_loads))
+    
+    # Sort the list based on load
+    sorted_cpu_loads = sorted(cpu_load_tuples, key=lambda x: x[1])
+    
+    # Get the IDs of the K cores with lowest load
+    selected_cpus = [core[0] for core in sorted_cpu_loads[:k]]
+    
+    return selected_cpus
+
+
+def set_cpu_affinity(pid, cpu_list):
+    try:
+        p = psutil.Process(pid)
+        p.cpu_affinity(cpu_list)
+        print(f"CPU affinity for process {pid} set to: {cpu_list}")
+    except psutil.NoSuchProcess:
+        print(f"Process with PID {pid} does not exist.")
+    except psutil.AccessDenied:
+        print("Permission denied. You may need sudo privileges to set CPU affinity.")
 
 def dnn_datasets():
     (_, _), (test_images, test_labels) = tf.keras.datasets.mnist.load_data()
@@ -233,7 +258,7 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
 
     return
 
-def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes=""):
+def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes="", labels=None):
     print("Benchmarking CNN model called")
     # check model is instance of string and contain .onnx
     if isinstance(model, str) and ".onnx" in model:
@@ -243,8 +268,12 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
 
     data_path = os.path.join(output_folder,model_name, 'input.json')
     loss = 0
+    loss_with_true_label = 0
     mem_usage = []
     time_cost = []
+    proof_size = []
+    verification_times = []
+
     benchmark_start_time = time.time()
 
     # setting 50 percent of model weights to zero
@@ -335,9 +364,9 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         else:
             print("Model is already in ONNX format and will be used for benchmarking - directory:", model_path)
 
+        # Serialize data into file:
         x = (img.cpu().detach().numpy().reshape([-1])).tolist()
         data = dict(input_data = [x])
-        # Serialize data into file:
         # if data_path is not exist, create it
         os.makedirs(os.path.dirname(data_path), exist_ok=True)
         json.dump(data, open(data_path, 'w'))
@@ -349,6 +378,16 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         
         stdout, error, usage = execute_and_monitor(command)
 
+        # log stdout to log file
+        os.mkdir('./logs') if not os.path.exists('./logs') else None
+        with open(f'./logs/{model_name}_log.txt', 'a') as f:
+            f.write(f"Image {i}:\n")
+            f.write(stdout)
+            f.write("\n\n\n\n")
+        with open(f'./logs/{model_name}_error.txt', 'a') as f:
+            f.write(f"Image {i}:\n")
+            f.write(error)
+            f.write("\n\n\n\n")
         # print("===== Error:", error)
         # print("===== Stdout:", stdout)
 
@@ -360,19 +399,36 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         else:
             print("Proof took value not found")
 
-        
+        # Extract the verification time from the stdout
+        match = re.search(r'verify took (\d+\.\d+)', stdout)
+        if match:
+            verification_times.append(match.group(1)*10) # convert to ms
+            print(f"Verification took: {match.group(1)} seconds")
+        else:
+            print("Verification time value not found")
+            return
+
+        # Extract the predicted class from the stdout
         try:
             pred = int(stdout[-2])
         except ValueError:
             print(f"Failed to convert {stdout[-2]} to int. Full output: {stdout}")
             pred  = -1
 
+        # Calculate the loss
         if pred != predictions[i]:
             loss += 1
-            print ("Loss happens on index", i, "predicted_class", pred, "\t True class", predictions[i])
-        mem_usage.append(usage)
+            print ("Loss happens on index", i, "predicted_class", pred, "\t onnx_prediction", predictions[i])
 
+        if pred != labels[i]:
+            loss_with_true_label += 1
+            print ("Loss happens on index", i, "predicted_class", pred, "\t true_label", labels[i])
+        
+        mem_usage.append(usage)
         time_cost.append(float(proof_took))
+        # compute proof size
+        proof_path = os.path.join(output_folder, 'proof.json')
+        proof_size.append(os.path.getsize(proof_path) / 1024)  # in KB
 
     print ("Total time:", time.time() - benchmark_start_time)
 
@@ -393,10 +449,15 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         '# Parameters': [params[model_name]],
         'Testing Size': [len(mem_usage)],
         'Accuracy Loss (%)': [loss/len(mem_usage) * 100],
+        'Acc@1 (%)' : [loss_with_true_label/len(test_images) * 100],
         'Avg Memory Usage (MB)': [sum(mem_usage) / len(mem_usage)],
         'Std Memory Usage': [pd.Series(mem_usage).std()],
         'Avg Proving Time (s)': [sum(time_cost) / len(time_cost)],
         'Std Proving Time': [pd.Series(time_cost).std()],
+        'Proof Size (KB)': [sum(proof_size) / len(proof_size)],
+        'Std Proof Size (KB)': [pd.Series(proof_size).std()],
+        'Verification Time (ms)': [sum([float(x) for x in verification_times]) / len(verification_times)],
+        'Std Verification Time (ms)': [pd.Series([float(x) for x in verification_times]).std()],
         'Notes': notes
     }
 
@@ -414,8 +475,12 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
 def load_csv():
     csv_path = '../../benchmarks/benchmark_results.csv'
 
-    columns = ['Framework', 'Architecture', '# Layers', '# Parameters', 'Testing Size', 'Accuracy Loss (%)', 
-            'Avg Memory Usage (MB)', 'Std Memory Usage', 'Avg Proving Time (s)', 'Std Proving Time', 'Notes']
+    columns = ['Framework', 'Architecture', '# Layers', '# Parameters', 'Testing Size', 'Accuracy Loss (%)', 'Acc@1 (%)', 
+            'Avg Memory Usage (MB)', 'Std Memory Usage', 
+            'Avg Proving Time (s)', ''
+            'Verification Time (ms)', 'Std Proving Time' ,
+            'Proof Size (KB)', 'Std Proof Size (KB)', 'Verification Time (ms)', 'Std Verification Time (ms)',
+            'Notes']
 
     # Check if the CSV file exists
     if not os.path.isfile(csv_path):
@@ -570,7 +635,7 @@ def prepare(model, layers):
     predicted_labels = predicted_labels.tolist()
     return predicted_labels, test_images
 
-def prepare_by_onnx(model_name=None,onnx_path=None):
+def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1):
     if model_name=='resnet20':
         # Define the transformations for the test dataset (Normalize CIFAR-100 according to dataset statistics)
         transform_test = transforms.Compose([
@@ -580,12 +645,29 @@ def prepare_by_onnx(model_name=None,onnx_path=None):
         # Load the CIFAR-100 test dataset
         test_dataset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
         # Create the DataLoader for the test dataset
-        test_images = DataLoader(test_dataset, batch_size=1, shuffle=False)
-        test_images = next(iter(test_images))[0]
-        # Ensure the shape is (1, 3, 32, 32) - add a batch dimension if needed
-        if len(test_images.shape) == 3:  # If the batch dimension is missing
-            test_images = test_images.unsqueeze(0)
-        print("Test images shape:", test_images.shape)
+        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
+        # test_images = next(iter(test_images))[0]
+        predictions = []
+        test_images = []
+        test_labels = []
+
+        for i, (images, labels) in enumerate(test_loader):
+            if i>=num_samples:
+                break
+            if len(images.shape) == 3:
+                images = images.unsqueeze(0)
+            test_images.append(images)
+            test_labels.append(labels)
+
+            # do inference on the onnx model
+            ort_session = onnxruntime.InferenceSession(onnx_path)
+            ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
+            ort_outs = ort_session.run(None, ort_inputs)
+            predicted_labels = np.argmax(ort_outs[0], axis=1)
+            predictions.append(predicted_labels)
+
+        return predictions, test_images, test_labels
+
 
         # do inference on the onnx model
         ort_session = onnxruntime.InferenceSession(onnx_path)
@@ -680,6 +762,9 @@ if __name__ == "__main__":
     parser.add_argument('--sparsity', type=float, default=0.0, help='Sparsity of the model')
     parser.add_argument('--teleported', action='store_true', help='Flag to indicate if use teleported mode')
 
+    # number of cpu cores
+    parser.add_argument('--cores', type=int, help='Number of CPU cores to use', default=32)
+
     args = parser.parse_args()
 
     if args.list:
@@ -693,6 +778,14 @@ if __name__ == "__main__":
     if not args.model or args.size is None:
         parser.error('--model and --size are required for benchmarking.')
 
+    # limit the number of cores
+    selected_cpus = select_k_cpus_with_lowest_load(args.cores)
+    print(f"Selected {args.cores} CPUs with lowest load:", selected_cpus)
+    # Get the process ID of the current process
+    pid = os.getpid()
+    set_cpu_affinity(pid, selected_cpus)
+    
+    # Define the layers for the model
     if args.model == "resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
     else:
@@ -712,12 +805,17 @@ if __name__ == "__main__":
     else:
         mode = "resources"
 
+    # Update notes
     notes = f'mode={mode}'
-
     if args.agg:
         start = args.agg
         notes += f' | start from {start}'
+    if args.sparsity > 0.0:
+        notes += f' | sparsity={args.sparsity}'
+    if args.teleported:
+        notes += " | teleported"
 
+    # Benchmarking on specific architecture
     if args.model == "resnet20":
         arch_folder = arch_folders[args.model]
         
@@ -730,11 +828,15 @@ if __name__ == "__main__":
         onnx_path += ".onnx"
         
         # do inference on the onnx model + dataset loading
-        predicted_labels, test_images = prepare_by_onnx(args.model,onnx_path)
+        predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,number_of_images=args.size)
+
+        # calculate the accuracy of original onnx model
+        accuracy_orignal_onnx = (np.array(predicted_labels) == np.array(test_labels)).sum() / len(test_labels)
+        print(f"Accuracy of original ONNX model: {accuracy_orignal_onnx}")
 
         # do benchmarking
         benchmark_cnn(test_images, predicted_labels, onnx_path, args.model, 
-                    mode=mode, save=args.save, notes=notes)
+                    mode=mode, save=args.save, notes=notes, test_labels=test_labels)
     elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
 
@@ -751,7 +853,6 @@ if __name__ == "__main__":
             # set args.sparsity percent of trainable param model to zero
             for param in model.parameters():
                 param.data = param.data * (torch.rand(param.size()) > args.sparsity).float()
-            notes += f' | sparsity={args.sparsity}'
 
         predicted_labels, tests = prepare(model, layers)
         benchmark_dnn(tests[start:start+args.size], predicted_labels[start:start+args.size], model, args.model, 

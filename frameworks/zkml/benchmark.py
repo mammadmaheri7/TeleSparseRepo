@@ -458,8 +458,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         match = re.search(proving_time_pattern, stdout)
         if match:
             proving_time = match.group(1)
-            print(f"Proving time: {proving_time} seconds")
-            verification_times.append(proving_time)
+            print(f"Proving time: {proving_time} seconds") 
+            time_cost.append(float(proving_time))
         else:
             print("Proving time not found.") 
             return
@@ -471,11 +471,10 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         if match:
             verification_time = match.group(1)
             print(f"Verification time: {verification_time} ms")
-
+            verification_times.append(verification_time)
         else:
             print("Verification time not found.")
-            # return
-
+            return
 
         # Extract x values using regex
         num_class_dict = {
@@ -502,11 +501,10 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         
         mem_usage.append(cost)
         # time_cost.append(time.time() - start_time)
-        time_cost.append(float(proving_time))
-        
+          
         # compute proof size
         proof_path = "./proof"
-        proof_size.append(os.path.getsize(proof_path) / 1024)
+        proof_size.append(os.path.getsize(proof_path) / 1024) # in KB
 
         # print("start stdout")
         # print(stdout)
