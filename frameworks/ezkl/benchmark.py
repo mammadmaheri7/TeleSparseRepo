@@ -827,7 +827,7 @@ if __name__ == "__main__":
         # define the onnx path 
         onnx_path = f"../../models/resnet20/{args.model}"
         if args.sparsity > 0.0:
-            onnx_path += f"_sparsity{args.sparsity}"
+            onnx_path += f"_sparsity{str(int(args.sparsity))}"
         if args.teleported:
             onnx_path += "_teleported"
         onnx_path += ".onnx"
