@@ -23,7 +23,8 @@ params = {"784_56_10": 44543,
             "28_6_16_10_5": 5142,
             "14_5_11_80_10_3": 4966, # @TODO: May doublecheck
             "28_6_16_120_84_10_5": 44530,
-            "resnet20": (-1),}
+            "resnet20": (-1),
+            "efficientnetb0": (-1)}
 
 accuracys = {"784_56_10": 0.9740,
             "196_25_10": 0.9541,
@@ -35,7 +36,8 @@ accuracys = {"784_56_10": 0.9740,
 arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "14_5_11_80_10_3": "input-conv2d-conv2d-dense-dense/",
                 "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
-                "resnet20": "resnet20/"}
+                "resnet20": "resnet20/",
+                "efficientnetb0": "efficientnetb0/"}
 import psutil
 def get_cpu_load():
     # Get CPU usage for each core
@@ -115,6 +117,100 @@ def cnn_datasets():
     test_images_pt_14 =  torch.tensor(test_images_tf_14).permute(0, 3, 1, 2).float()
 
     return test_images_pt, test_images_pt_14
+
+
+import os, glob
+try:
+    from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
+    from nvidia.dali.pipeline import pipeline_def
+    import nvidia.dali.types as types
+    import nvidia.dali.fn as fn
+except ImportError:
+    print("ImportError: Please install DALI from https://www.github.com/NVIDIA/DALI to run this example.")
+
+
+@pipeline_def
+def create_dali_pipeline(data_dir, crop, size, shard_id, num_shards, dali_cpu=False, is_training=True, testsize=-1, args=None):
+    if testsize != -1:
+        labels = []
+        files = []
+        # import pdb; pdb.set_trace()
+        for i, l in enumerate(sorted(os.listdir(data_dir))):
+            ps = glob.glob(os.path.join(data_dir, l, "*.JPEG"))
+            files += ps
+            labels += [i] * len(ps)
+        labels = labels[::len(files) // testsize][:-1]
+        files = files[::len(files) // testsize][:-1]
+        print(is_training, len(files))
+        images, labels = fn.readers.file(files=files,
+                                        labels=labels,
+                                        shard_id=shard_id,
+                                        num_shards=num_shards,
+                                        random_shuffle=is_training,
+                                        pad_last_batch=True,
+                                        name="Reader")
+    else:
+        images, labels = fn.readers.file(file_root=data_dir,
+                                        shard_id=shard_id,
+                                        num_shards=num_shards,
+                                        random_shuffle=is_training,
+                                        pad_last_batch=True,
+                                        name="Reader")
+
+    dali_device = 'cpu' if dali_cpu else 'gpu'
+    decoder_device = 'cpu' if dali_cpu else 'mixed'
+    # ask nvJPEG to preallocate memory for the biggest sample in ImageNet for CPU and GPU to avoid reallocations in runtime
+    device_memory_padding = 211025920 if decoder_device == 'mixed' else 0
+    host_memory_padding = 140544512 if decoder_device == 'mixed' else 0
+    # ask HW NVJPEG to allocate memory ahead for the biggest image in  the data set to avoid reallocations in runtime
+    preallocate_width_hint = 5980 if decoder_device == 'mixed' else 0
+    preallocate_height_hint = 6430 if decoder_device == 'mixed' else 0
+    images = fn.decoders.image(images,
+                                   device=decoder_device,
+                                   output_type=types.RGB)
+    images = fn.resize(images,
+                        device=dali_device,
+                        size=size,
+                        mode="not_smaller",
+                        interp_type=types.INTERP_CUBIC)
+    # images = fn.jitter(images, 
+    #                    interp_type=types.INTERP_CUBIC)
+
+    images = fn.crop_mirror_normalize(images,
+                                      dtype=types.FLOAT,
+                                      output_layout="CHW",
+                                      crop=(crop, crop),
+                                      mean=[d * 255 for d in args.mean],
+                                      std=[d * 255 for d in args.std],
+                                      mirror=False)
+    labels = labels.cpu()
+    return images, labels
+
+def get_val_imagenet_dali_loader(args, val_batchsize=32, crop_size=224, val_size=256):
+    args.local_rank = 0
+    args.dali_cpu = False
+    args.world_size = 1
+    args.workers = 1
+    if not hasattr(args, 'imagenet_dir'):
+        args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
+    valdir = os.path.join(args.imagenet_dir, 'val')
+#     valdir = os.path.join(data_route["imagenet"], 'val')
+    pipe = create_dali_pipeline(batch_size=val_batchsize,
+                                num_threads=args.workers,
+                                device_id=None,
+                                seed=12 + args.local_rank,
+                                data_dir=valdir,
+                                crop=crop_size,
+                                size=val_size,
+                                dali_cpu=True,
+                                shard_id=args.local_rank,
+                                num_shards=args.world_size,
+                                is_training=False,
+                                testsize=args.val_testsize,
+                                args=args)
+    pipe.build()
+    val_loader = DALIClassificationIterator(pipe, reader_name="Reader", last_batch_policy=LastBatchPolicy.PARTIAL)
+    return val_loader
 
 def evaluate_pytorch_model(model, datasets, labels):
     # Create TensorDataset for test data
@@ -439,6 +535,8 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
 
     if model_name=="resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
+    elif model_name=="efficientnetb0":
+        layers = [11, 11, 11]
     else:
         layers = model_name.split("_")
 
@@ -640,7 +738,7 @@ def prepare(model, layers):
     predicted_labels = predicted_labels.tolist()
     return predicted_labels, test_images
 
-def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1):
+def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
     if model_name=='resnet20':
         # Define the transformations for the test dataset (Normalize CIFAR-100 according to dataset statistics)
         transform_test = transforms.Compose([
@@ -678,14 +776,40 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1):
         predictions = torch.tensor(predictions).squeeze()
 
         return predictions, test_images, test_labels
+    elif model_name=='efficientnetb0':
+        # Transformation for imagenet dataset
+        if not hasattr(args, 'imagenet_dir'):
+            args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
+        imagenet_test_dir = os.path.join(args.imagenet_dir, 'val')
 
+        val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
+        
+        predictions = []
+        test_images = []
+        test_labels = []
 
-        # do inference on the onnx model
-        ort_session = onnxruntime.InferenceSession(onnx_path)
-        ort_inputs = {ort_session.get_inputs()[0].name: test_images.numpy()}
-        ort_outs = ort_session.run(None, ort_inputs)
-        predicted_labels = np.argmax(ort_outs[0], axis=1)
-        return predicted_labels, test_images
+        for i, data in enumerate(val_loader):
+            if i>=num_samples:
+                break
+            images = data[0]['data']
+            labels = data[0]['label']
+            test_images.append(images)
+            test_labels.append(labels)
+
+            # do inference on the onnx model
+            ort_session = onnxruntime.InferenceSession(onnx_path)
+            ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
+            ort_outs = ort_session.run(None, ort_inputs)
+            predicted_labels = np.argmax(ort_outs[0], axis=1)
+            predictions.append(predicted_labels)
+
+        # convert list to tensor
+        test_images = torch.cat(test_images)
+        test_labels = torch.cat(test_labels)
+        predictions = torch.tensor(predictions).squeeze()
+
+        return predictions, test_images, test_labels
+
     else:
         print("Model not supported")
         # error ValueError: Model not supported
@@ -827,12 +951,13 @@ if __name__ == "__main__":
         notes += " | teleported"
 
     # Benchmarking on specific architecture
-    if args.model == "resnet20":
+    if args.model == "resnet20" or args.model == "efficientnetb0":
         arch_folder = arch_folders[args.model]
         
         # define the onnx path 
-        onnx_path = f"../../models/resnet20/{args.model}"
-        dataset_name = "cifar100"
+        # onnx_path = f"../../models/resnet20/{args.model}"
+        onnx_path = f"../../models/{arch_folder}/{args.model}"
+        dataset_name = "cifar100" if args.model == "resnet20" else "imagenet"
         onnx_path += f"_{dataset_name}"
         if args.sparsity > 0.0:
             onnx_path += f"_sparse{str(int(args.sparsity))}"
@@ -841,7 +966,7 @@ if __name__ == "__main__":
         onnx_path += ".onnx"
         
         # do inference on the onnx model + dataset loading
-        predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,num_samples=args.size)
+        predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,num_samples=args.size,args=args)
 
         # calculate the accuracy of original onnx model        
         accuracy_orignal_onnx = (predicted_labels == test_labels).sum().item() / len(test_labels)
