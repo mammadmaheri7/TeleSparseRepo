@@ -146,14 +146,14 @@ def create_dali_pipeline(data_dir, crop, size, shard_id, num_shards, dali_cpu=Fa
                                         labels=labels,
                                         shard_id=shard_id,
                                         num_shards=num_shards,
-                                        random_shuffle=is_training,
+                                        random_shuffle=True,
                                         pad_last_batch=True,
                                         name="Reader")
     else:
         images, labels = fn.readers.file(file_root=data_dir,
                                         shard_id=shard_id,
                                         num_shards=num_shards,
-                                        random_shuffle=is_training,
+                                        random_shuffle=True,
                                         pad_last_batch=True,
                                         name="Reader")
 
@@ -777,6 +777,7 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
         predictions = torch.tensor(predictions).squeeze()
 
         return predictions, test_images, test_labels
+
     elif model_name=='efficientnetb0':
         # Transformation for imagenet dataset
         if not hasattr(args, 'imagenet_dir'):
