@@ -782,6 +782,7 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
         if not hasattr(args, 'imagenet_dir'):
             args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
 
+        args.val_testsize = num_samples + 1
         val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
         
         predictions = []
