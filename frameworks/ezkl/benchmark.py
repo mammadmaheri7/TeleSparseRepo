@@ -900,6 +900,9 @@ if __name__ == "__main__":
     # number of cpu cores
     parser.add_argument('--cores', type=int, help='Number of CPU cores to use', default=32)
 
+    # args.imagenet_dir
+    parser.add_argument('--imagenet_dir', type=str, help='Directory of the ImageNet dataset', default="/rds/general/user/mm6322/home/imagenet")
+
     args = parser.parse_args()
 
     if args.list:
