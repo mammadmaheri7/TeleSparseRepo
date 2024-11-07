@@ -671,6 +671,12 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1):
             predicted_labels = np.argmax(ort_outs[0], axis=1)
             predictions.append(predicted_labels)
 
+        
+        # convert list to tensor
+        test_images = torch.cat(test_images)
+        test_labels = torch.cat(test_labels)
+        predictions = torch.tensor(predictions).squeeze()
+
         return predictions, test_images, test_labels
 
 
@@ -838,6 +844,9 @@ if __name__ == "__main__":
         predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,num_samples=args.size)
 
         # calculate the accuracy of original onnx model
+        print("predicted_labels:", predicted_labels)
+        print("test_labels:", test_labels)
+        print("test_images shape:", test_images.shape)
         predicted_labels_flat = np.array([label[0] for label in predicted_labels])  # Convert to 1D numpy array
         test_labels_flat = np.array([label.item() for label in test_labels])        # Convert to 1D numpy array
         accuracy_orignal_onnx = (predicted_labels_flat == test_labels_flat).sum() / len(test_labels_flat)
