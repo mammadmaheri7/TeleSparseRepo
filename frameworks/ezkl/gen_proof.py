@@ -29,7 +29,16 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
     run_args.param_scale = 12
     run_args.scale_rebase_multiplier = 1
     lsm = 8
-    max_log_rows = 18
+    # max_log_rows = 18
+    # condition on model to set the max_log_rows
+    if "resnet20" in model_path:
+        max_log_rows = 18
+    elif "resnet50" in model_path:
+        max_log_rows = 19
+    else:
+        print("Model not supported")
+        exit(1)
+        return
 
     print("Generating settings")
     try:
