@@ -36,6 +36,11 @@ arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "14_5_11_80_10_3": "input-conv2d-conv2d-dense-dense/",
                 "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
                 "resnet20": "resnet20/"}
+import psutil
+def get_cpu_load():
+    # Get CPU usage for each core
+    cpu_loads = psutil.cpu_percent(interval=1, percpu=True)
+    return cpu_loads
 
 def select_k_cpus_with_lowest_load(k):
     # Get CPU usage for each core
