@@ -786,7 +786,7 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
         from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
         args.mean = IMAGENET_DEFAULT_MEAN
         args.std = IMAGENET_DEFAULT_STD
-        
+
         val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
 
         predictions = []
@@ -964,7 +964,7 @@ if __name__ == "__main__":
 
     # Benchmarking on specific architecture
     if args.model == "resnet20" or args.model == "efficientnetb0":
-        arch_folder = arch_folders[args.model]
+        arch_folder = arch_folders[args.model].rstrip("/")
         
         # define the onnx path 
         # onnx_path = f"../../models/resnet20/{args.model}"
