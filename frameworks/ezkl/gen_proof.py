@@ -33,7 +33,7 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
     # condition on model to set the max_log_rows
     if "resnet20" in model_path:
         max_log_rows = 18
-    elif "resnet50" in model_path:
+    elif "efficientnetb0" in model_path:
         max_log_rows = 19
     else:
         print("Model not supported")
