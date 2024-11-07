@@ -926,6 +926,10 @@ if __name__ == "__main__":
     # Define the layers for the model
     if args.model == "resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
+        layers = [str(x) for x in layers]
+    elif args.model == "efficientnetb0":
+        layers = [11, 11, 11]
+        layers = [str(x) for x in layers]
     else:
         layers = [int(x) for x in args.model.split("_")]
     model_path = "../../models/"
