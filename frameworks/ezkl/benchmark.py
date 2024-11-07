@@ -833,7 +833,7 @@ if __name__ == "__main__":
         onnx_path += ".onnx"
         
         # do inference on the onnx model + dataset loading
-        predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,number_of_images=args.size)
+        predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,num_samples=args.size)
 
         # calculate the accuracy of original onnx model
         accuracy_orignal_onnx = (np.array(predicted_labels) == np.array(test_labels)).sum() / len(test_labels)
