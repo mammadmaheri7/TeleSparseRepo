@@ -846,7 +846,7 @@ if __name__ == "__main__":
 
         # do benchmarking
         benchmark_cnn(test_images, predicted_labels, onnx_path, args.model, 
-                    mode=mode, save=args.save, notes=notes, test_labels=test_labels)
+                    mode=mode, save=args.save, notes=notes, labels=test_labels)
     elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
 
