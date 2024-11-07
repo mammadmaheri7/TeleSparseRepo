@@ -838,9 +838,10 @@ if __name__ == "__main__":
         predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,num_samples=args.size)
 
         # calculate the accuracy of original onnx model
-        print(f"Predicted labels: {predicted_labels}")
-        print(f"Test labels: {test_labels}")
-        accuracy_orignal_onnx = (np.array(predicted_labels) == np.array(test_labels)).sum() / len(test_labels)
+        predicted_labels_flat = np.array([label[0] for label in predicted_labels])  # Convert to 1D numpy array
+        test_labels_flat = np.array([label.item() for label in test_labels])        # Convert to 1D numpy array
+        accuracy_orignal_onnx = (predicted_labels_flat == test_labels_flat).sum() / len(test_labels_flat)
+
         print(f"Accuracy of original ONNX model: {accuracy_orignal_onnx}")
 
         # do benchmarking
