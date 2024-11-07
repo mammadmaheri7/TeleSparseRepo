@@ -316,7 +316,8 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
 
         # retrive the prediction from the stdout
         try:
-            pred = int(stdout[-2])
+            # pred = int(stdout[-2])
+            pred = int(re.search(r'Prediction: (\d+)', stdout).group(1))
         except ValueError:
             print(f"Failed to convert {stdout[-2]} to int. Full output: {stdout}")
             pred  = -1
@@ -780,7 +781,6 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
         # Transformation for imagenet dataset
         if not hasattr(args, 'imagenet_dir'):
             args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
-        imagenet_test_dir = os.path.join(args.imagenet_dir, 'val')
 
         val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
         
