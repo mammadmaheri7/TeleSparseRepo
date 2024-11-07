@@ -783,8 +783,12 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
             args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
 
         args.val_testsize = num_samples + 1
-        val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
+        from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+        args.mean = IMAGENET_DEFAULT_MEAN
+        args.std = IMAGENET_DEFAULT_STD
         
+        val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
+
         predictions = []
         test_images = []
         test_labels = []
