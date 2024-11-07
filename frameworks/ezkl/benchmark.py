@@ -936,7 +936,7 @@ if __name__ == "__main__":
 
     start = 0
 
-    if layers[0] > 30 and not args.model=="resnet20":
+    if not args.model=="resnet20" and not args.model=="efficientnetb0" and layers[0] > 30 :
         dnn = True
     else:
         dnn = False
