@@ -824,7 +824,7 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
         # cifar10 dataset
         transform_test = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
         test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)

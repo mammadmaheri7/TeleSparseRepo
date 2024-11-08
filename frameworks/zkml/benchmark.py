@@ -5,6 +5,8 @@ import concurrent.futures, subprocess, threading, psutil, time
 import pandas as pd
 from tensorflow.keras.preprocessing import image_dataset_from_directory
 from tensorflow.keras.applications.efficientnet import preprocess_input, decode_predictions
+from torchvision import datasets, transforms
+import torch
 
 params = {"784_56_10": 44543,
           "196_25_10": 5185,
@@ -13,7 +15,8 @@ params = {"784_56_10": 44543,
             "14_5_11_80_10_3": 4966, # @TODO: May doublecheck
             "28_6_16_120_84_10_5": 44530,
             "resnet20": (-1),
-            "efficientnetb0": (-1)
+            "efficientnetb0": (-1),
+            "mobilenetv1": (-1)
 
             }
          
@@ -30,6 +33,7 @@ arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
                 "resnet20": "resnet20/",
                 "efficientnetb0": "efficientnetb0/",
+                "mobilenetv1": "mobilenetv1/",
                 }
 
 def get_predictions(interpreter, test_images):
@@ -208,6 +212,23 @@ def cnn_datasets(dataset_name=None,args=None):
         sampled_labels = tf.gather(sampled_labels, indices)
 
         return sampled_images, sampled_labels
+    
+    elif dataset_name is not None and dataset_name == "cifar10":
+        transform_test = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
+        testset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+        test_loader = torch.utils.data.DataLoader(testset, batch_size=32, shuffle=False, num_workers=2)
+
+        test_images = []
+        test_labels = []
+        for i, (images, labels) in enumerate(test_loader):
+            test_images.append(images.numpy())
+            test_labels.append(labels.numpy())
+        test_images = np.concatenate(test_images, axis=0)
+        test_labels = np.concatenate(test_labels, axis=0)
+        return test_images, test_labels
 
     else:
         # Load TensorFlow MNIST data
@@ -368,6 +389,11 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         k = 21
         num_cols = 32
         num_randoms = 1024 * 32
+    elif model_name == "mobilenetv1":
+        scale_factor = (2**12)
+        k = 20
+        num_cols = 64
+        num_randoms = 1024 * 32
     elif model_name == "efficientnetb0":
         scale_factor = (2**12)
         k = 23
@@ -480,6 +506,7 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         num_class_dict = {
             "resnet20": 100,
             "efficientnetb0": 1000,
+            "mobilenetv1": 10
         }
         num_class = num_class_dict[model_name]
         x_values = [int(x) for x in re.findall(r'final out\[\d+\] x: (-?\d+) \(', stdout)][(-1*num_class):]
@@ -516,6 +543,9 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
     if model_name=="resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
+        layers = [str(x) for x in layers]
+    elif model_name=="mobilenetv1":
+        layers = [32, 64, 128, 128, 256, 256]
         layers = [str(x) for x in layers]
     elif model_name=="efficientnetb0":
         layers = ["11","11","11"]
@@ -696,6 +726,8 @@ if __name__ == "__main__":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64]
     elif args.model == "efficientnetb0":
         layers = [11, 11, 11]
+    elif args.model == "mobilenetv1":
+        layers = [32, 64, 128, 128, 256, 256]
     else:
         layers = [int(x) for x in args.model.split("_")]
     model_path = "../../models/"
@@ -709,7 +741,7 @@ if __name__ == "__main__":
         start = args.agg
         notes = f'start from {start}'
 
-    if args.model == "resnet20" or args.model == "efficientnetb0":
+    if args.model == "resnet20" or args.model == "efficientnetb0" or args.model == "mobilenetv1":
         cnn = True
     elif layers[0] > 30:
         dnn = True
@@ -734,6 +766,15 @@ if __name__ == "__main__":
         # calculate accuracy between predicted_labels and true_labels
         accuracy = sum([1 for i in range(len(predicted_labels)) if predicted_labels[i] == true_labels[i][0]]) / len(predicted_labels)
         print(f"Accuracy between the true labels and tflite model is: {accuracy}")
+    elif args.model == "mobilenetv1":
+        print(" MAKE SURE TO RUN convert_onnx_to_tflite FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
+        arch_folder = "mobilenetv1/"
+        os.makedirs(model_path + arch_folder, exist_ok=True)
+        model_in_path = model_path + arch_folder + args.model + '.tflite'
+        interpreter = tf.lite.Interpreter(model_path=model_in_path)
+        interpreter.allocate_tensors()
+        tests, true_labels = cnn_datasets(dataset_name="cifar10",args=args)
+        predicted_labels = get_predictions(interpreter, tests)
     elif args.model == "efficientnetb0":
         print(" MAKE SURE TO RUN convert_onnx_to_tflite FIRST TO SAVE THE MODEL IN tf_lite FORMAT")
         arch_folder = "efficientnetb0/"
