@@ -24,7 +24,8 @@ params = {"784_56_10": 44543,
             "14_5_11_80_10_3": 4966, # @TODO: May doublecheck
             "28_6_16_120_84_10_5": 44530,
             "resnet20": (-1),
-            "efficientnetb0": (-1)}
+            "efficientnetb0": (-1),
+            "mobilenetv1": (-1)}
 
 accuracys = {"784_56_10": 0.9740,
             "196_25_10": 0.9541,
@@ -37,7 +38,8 @@ arch_folders = {"28_6_16_10_5": "input-conv2d-conv2d-dense/",
                 "14_5_11_80_10_3": "input-conv2d-conv2d-dense-dense/",
                 "28_6_16_120_84_10_5": "input-conv2d-conv2d-dense-dense-dense/",
                 "resnet20": "resnet20/",
-                "efficientnetb0": "efficientnetb0/"}
+                "efficientnetb0": "efficientnetb0/",
+                "mobilenetv1": "mobilenetv1/"}
 import psutil
 def get_cpu_load():
     # Get CPU usage for each core
@@ -538,6 +540,8 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
     elif model_name=="efficientnetb0":
         layers = [11, 11, 11]
+    elif model_name == "mobilenetv1":
+        layers = [32, 64, 128, 128, 256, 256]
     else:
         layers = model_name.split("_")
 
@@ -816,6 +820,40 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
 
         return predictions, test_images, test_labels
 
+    elif model_name=='mobilenetv1':
+        # cifar10 dataset
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
+        predictions = []
+        test_images = []
+        test_labels = []
+
+        for i, (images, labels) in enumerate(test_loader):
+            if i>=num_samples:
+                break
+            if len(images.shape) == 3:
+                images = images.unsqueeze(0)
+            test_images.append(images)
+            test_labels.append(labels)
+
+            # do inference on the onnx model
+            ort_session = onnxruntime.InferenceSession(onnx_path)
+            ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
+            ort_outs = ort_session.run(None, ort_inputs)
+            predicted_labels = np.argmax(ort_outs[0], axis=1)
+            predictions.append(predicted_labels)
+
+        # convert list to tensor
+        test_images = torch.cat(test_images)
+        test_labels = torch.cat(test_labels)
+        predictions = torch.tensor(predictions).squeeze()
+
+        return predictions, test_images, test_labels
+
     else:
         print("Model not supported")
         # error ValueError: Model not supported
@@ -936,13 +974,16 @@ if __name__ == "__main__":
     elif args.model == "efficientnetb0":
         layers = [11, 11, 11]
         layers = [str(x) for x in layers]
+    elif args.model == "mobilenetv1":
+        layers = [32, 64, 128, 128, 256, 256]
+        layers = [str(x) for x in layers]
     else:
         layers = [int(x) for x in args.model.split("_")]
     model_path = "../../models/"
 
     start = 0
 
-    if not args.model=="resnet20" and not args.model=="efficientnetb0" and layers[0] > 30 :
+    if not args.model=="resnet20" and not args.model=="efficientnetb0" and not args.model=="mobilenetv1" and layers[0] > 30 :
         dnn = True
     else:
         dnn = False
@@ -964,13 +1005,13 @@ if __name__ == "__main__":
         notes += " | teleported"
 
     # Benchmarking on specific architecture
-    if args.model == "resnet20" or args.model == "efficientnetb0":
+    if args.model == "resnet20" or args.model == "efficientnetb0" or args.model == "mobilenetv1":
         arch_folder = arch_folders[args.model].rstrip("/")
         
         # define the onnx path 
         # onnx_path = f"../../models/resnet20/{args.model}"
         onnx_path = f"../../models/{arch_folder}/{args.model}"
-        dataset_name = "cifar100" if args.model == "resnet20" else "imagenet"
+        dataset_name = "cifar100" if args.model == "resnet20" else "imagenet" if args.model == "efficientnetb0" else "cifar10"
         onnx_path += f"_{dataset_name}"
         if args.sparsity > 0.0:
             onnx_path += f"_sparse{str(int(args.sparsity))}"

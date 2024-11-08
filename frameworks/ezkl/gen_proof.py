@@ -35,6 +35,8 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
         max_log_rows = 18
     elif "efficientnetb0" in model_path:
         max_log_rows = 19
+    elif "mobilenetv1" in model_path:
+        max_log_rows = 18
     else:
         print("Model not supported")
         exit(1)
