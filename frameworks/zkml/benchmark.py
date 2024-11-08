@@ -61,7 +61,7 @@ def get_predictions(interpreter, test_images):
 
     return predictions
 
-def monitor_memory(pid, freq = 0.01):
+def monitor_memory(pid, freq = 0.001):
     p = psutil.Process(pid)
     max_memory = 0
     while True:

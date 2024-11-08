@@ -32,7 +32,7 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
     # max_log_rows = 18
     # condition on model to set the max_log_rows
     if "resnet20" in model_path:
-        max_log_rows = 18
+        max_log_rows = 17
     elif "efficientnetb0" in model_path:
         max_log_rows = 19
     elif "mobilenetv1" in model_path:

@@ -235,7 +235,7 @@ def evaluate_pytorch_model(model, datasets, labels):
     return accuracy
 
 
-def monitor_memory(pid, freq = 0.01):
+def monitor_memory(pid, freq = 0.001):
     p = psutil.Process(pid)
     max_memory = 0
     while True:
@@ -535,6 +535,12 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         proof_size.append(os.path.getsize(proof_path) / 1024)  # in KB
 
     print ("Total time:", time.time() - benchmark_start_time)
+
+    print("List mem usage:", mem_usage)
+    print("List time cost:", time_cost)
+    print("List proof size:", proof_size)
+    print("List verification times:", verification_times)
+    
 
     if model_name=="resnet20":
         layers = [16, 16, 16, 16, 16, 16, 16, 32, 32, 32, 32, 32, 32, 64, 64, 64, 64, 64, 64] 
