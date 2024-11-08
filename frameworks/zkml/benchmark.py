@@ -391,9 +391,9 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
         num_randoms = 1024 * 32
     elif model_name == "mobilenetv1":
         scale_factor = (2**12)
-        k = 20
+        k = 21
         num_cols = 64
-        num_randoms = 1024 * 32
+        num_randoms = 1024 * 64
     elif model_name == "efficientnetb0":
         scale_factor = (2**12)
         k = 23
