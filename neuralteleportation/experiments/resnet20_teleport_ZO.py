@@ -441,9 +441,10 @@ if __name__ == '__main__':
     for file in os.listdir(args.prefix_dir + "images"):
         os.remove(os.path.join(args.prefix_dir + "images", file))
     # download the CIFAR100 dataset
+
     transform_test = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))  # Mean and std for CIFAR-10
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))  # Mean and std for CIFAR-100
     ])
     testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
     testloader = DataLoader(testset, batch_size=1, shuffle=True)
@@ -455,11 +456,25 @@ if __name__ == '__main__':
         img = img.squeeze(0)
         img = img.permute(1, 2, 0)
         img = img.numpy()
-        plt.imsave(args.prefix_dir + f"images/{i}.JPEG", img) 
+        # plt.imsave(args.prefix_dir + f"images/{i}.JPEG", img) 
+        np.save(args.prefix_dir + f"images/{i}.npy", img)
 
 
     list_jpeg = os.listdir(args.prefix_dir + "images")
-    list_jpeg = [x for x in list_jpeg if x.endswith(".JPEG")]
+    # list_jpeg = [x for x in list_jpeg if x.endswith(".JPEG")]
+    list_jpeg = [x for x in list_jpeg if x.endswith(".npy")]
+
+    # Evaluate the model on the CIFAR-100 dataset
+    corroct , total = 0, 0
+    with torch.no_grad():
+        for data in testloader:
+            images, labels = data
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            corroct += (predicted == labels).sum().item()
+    print('Accuracy of the network on the 10000 test images: %.2f %%' % (100 * corroct / total))
+    print("----------------- ================== -----------------")
 
     # computing accuracy of the teleportation
     teleport_correct = 0
@@ -488,14 +503,16 @@ if __name__ == '__main__':
 
             for jpeg_path in list_jpeg:
                 print("=== jpeg_path:",jpeg_path)
-                img = Image.open(args.prefix_dir + f"images/{jpeg_path}")
+                # img = Image.open(args.prefix_dir + f"images/{jpeg_path}")
+                img = np.load(args.prefix_dir + f"images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
-                img = img.resize((32,32))
-                # data = transforms.ToTensor()(img).unsqueeze(0)
+                # img = img.resize((32,32))
+                img = img.reshape(32,32,3)
                 # apply transformation
-                cifar100_nm = transforms.Normalize((0.5071,0.4867,0.4408),(0.2675,0.2565,0.2761))
-                transform_cifar = transforms.Compose([transforms.ToTensor(),cifar100_nm])
-                data = transform_cifar(img).unsqueeze(0)
+                # cifar100_nm = transforms.Normalize((0.5071,0.4867,0.4408),(0.2675,0.2565,0.2761))
+                # transform_cifar = transforms.Compose([transforms.ToTensor(),cifar100_nm])
+                # data = transform_cifar(img).unsqueeze(0)
+                data = torch.tensor(img).permute(2,0,1).unsqueeze(0).float()
                 print("=== data.shape:",data.shape)
 
                 # compute the output_orig and grad_orig dictionaries
@@ -587,7 +604,8 @@ if __name__ == '__main__':
                 network_input_data = copy.deepcopy(data)
 
                 # generate data for all layers
-                data_path = os.path.join(os.getcwd(),args.prefix_dir, f"input_convs.json")
+                # data_path = os.path.join(os.getcwd(),args.prefix_dir, f"input_convs.json")
+                data_path = os.path.join(os.getcwd(),args.prefix_dir, f"input_{img_name}.json")
                 data_dict = dict(input_data = [((data).detach().numpy()).reshape([-1]).tolist()])
                 json.dump( data_dict, open(data_path, 'w' ))
 
@@ -720,3 +738,5 @@ if __name__ == '__main__':
                     print("==========================")
                     time.sleep(2)
                     break
+
+            break
