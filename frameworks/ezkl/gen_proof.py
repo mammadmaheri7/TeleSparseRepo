@@ -63,12 +63,12 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
     except Exception as e:
         print(f"Error: {e}")
         exit(1)
-    # assert res == True
+    assert res == True
 
-    # # print all settings file content
-    # with open(settings_path, "r") as f:
-    #     setting = json.load(f)
-    #     print(setting)
+    # print all settings file content
+    with open(settings_path, "r") as f:
+        setting = json.load(f)
+        print(setting)
     
     # print("Compiling circuit")
     # res = ezkl.compile_circuit(model_path, compiled_model_path, settings_path)
