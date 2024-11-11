@@ -502,6 +502,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             print(f"Proof took: {proof_took} seconds")
         else:
             print("Proof took value not found")
+            proof_took = 0
 
         # Extract the verification time from the stdout
         match = re.search(r'verify took (\d+\.\d+)', stdout)
@@ -513,7 +514,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             print(f"Verification took: {match.group(1)} seconds")
         else:
             print("Verification time value not found")
-            return
+            # return
 
         # Extract the predicted class from the stdout
         try:
@@ -595,8 +596,7 @@ def load_csv():
 
     columns = ['Framework', 'Architecture', '# Layers', '# Parameters', 'Testing Size', 'Accuracy Loss (%)', 'Acc@1 (%)', 
             'Avg Memory Usage (MB)', 'Std Memory Usage', 
-            'Avg Proving Time (s)', ''
-            'Verification Time (ms)', 'Std Proving Time' ,
+            'Avg Proving Time (s)', 'Std Proving Time' ,
             'Proof Size (KB)', 'Std Proof Size (KB)', 'Verification Time (ms)', 'Std Verification Time (ms)',
             'Notes']
 

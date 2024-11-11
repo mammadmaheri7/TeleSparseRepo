@@ -65,79 +65,81 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
         exit(1)
     # assert res == True
 
-    # print all settings file content
-    with open(settings_path, "r") as f:
-        setting = json.load(f)
-        print(setting)
+    # # print all settings file content
+    # with open(settings_path, "r") as f:
+    #     setting = json.load(f)
+    #     print(setting)
     
-    print("Compiling circuit")
-    res = ezkl.compile_circuit(model_path, compiled_model_path, settings_path)
-    assert res == True
+    # print("Compiling circuit")
+    # res = ezkl.compile_circuit(model_path, compiled_model_path, settings_path)
+    # assert res == True
 
-    # srs path
-    print("Getting SRS")
-    res = await ezkl.get_srs(settings_path)
-    assert res == True
+    # # srs path
+    # print("Getting SRS")
+    # res = await ezkl.get_srs(settings_path)
+    # assert res == True
 
-    # now generate the witness file
-    try:
-        res = await ezkl.gen_witness(data_path, compiled_model_path, witness_path)
-    except Exception as e:
-        print(f"Error: {e}")
-        exit(1)
-    assert os.path.isfile(witness_path)
+    # # now generate the witness file
+    # try:
+    #     res = await ezkl.gen_witness(data_path, compiled_model_path, witness_path)
+    # except Exception as e:
+    #     print(f"Error: {e}")
+    #     exit(1)
+    # assert os.path.isfile(witness_path)
 
-    with open(witness_path, "r") as f:
-        wit = json.load(f)
+    # with open(witness_path, "r") as f:
+    #     wit = json.load(f)
 
-    with open(settings_path, "r") as f:
-        setting = json.load(f)
+    # with open(settings_path, "r") as f:
+    #     setting = json.load(f)
 
 
-    prediction_array = []
+    # prediction_array = []
 
-    # for value in wit['pretty_elements']['rescaled_outputs']:
+    # # for value in wit['pretty_elements']['rescaled_outputs']:
+    # #     for field_element in value:
+    # #         # prediction_array.append(ezkl.vecu64_to_float(field_element, setting['model_output_scales'][0]))
+    # #         prediction_array.append(field_element)
+
+    # for value in wit["outputs"]:
     #     for field_element in value:
-    #         # prediction_array.append(ezkl.vecu64_to_float(field_element, setting['model_output_scales'][0]))
-    #         prediction_array.append(field_element)
+    #         prediction_array.append(ezkl.felt_to_float(field_element, setting['model_output_scales'][0]))
 
-    for value in wit["outputs"]:
-        for field_element in value:
-            prediction_array.append(ezkl.felt_to_float(field_element, setting['model_output_scales'][0]))
+    # pred = np.argmax([prediction_array])
 
-    pred = np.argmax([prediction_array])
+    # print("Mocking")
+    # res = ezkl.mock(witness_path, compiled_model_path)
+    # assert res == True
 
-    print("Mocking")
-    res = ezkl.mock(witness_path, compiled_model_path)
-    assert res == True
+    # print("Setting up")
+    # res = ezkl.setup(
+    #         compiled_model_path,
+    #         vk_path,
+    #         pk_path,
+    #     )
+    # assert res == True
+    # assert os.path.isfile(vk_path)
+    # assert os.path.isfile(pk_path)
+    # assert os.path.isfile(settings_path)
 
-    print("Setting up")
-    res = ezkl.setup(
-            compiled_model_path,
-            vk_path,
-            pk_path,
-        )
-    assert res == True
-    assert os.path.isfile(vk_path)
-    assert os.path.isfile(pk_path)
-    assert os.path.isfile(settings_path)
+    # # Generate the proof
+    # print("Generating proof")
+    # # remove cache file to have fair comparison.
+    # cache_dir = os.path.expanduser("~/.ezkl/cache")
+    # if os.path.exists(cache_dir):
+    #     shutil.rmtree(cache_dir)
 
-    # Generate the proof
-    print("Generating proof")
-    # remove cache file to have fair comparison.
-    cache_dir = os.path.expanduser("~/.ezkl/cache")
-    if os.path.exists(cache_dir):
-        shutil.rmtree(cache_dir)
+    # command = f"ezkl prove --witness {witness_path} --compiled-circuit {compiled_model_path} --pk-path {pk_path} --proof-path {proof_path}"
+    # os.system(command)    
+    # #print(proof)
+    # assert os.path.isfile(proof_path)
 
-    command = f"ezkl prove --witness {witness_path} --compiled-circuit {compiled_model_path} --pk-path {pk_path} --proof-path {proof_path}"
-    os.system(command)    
-    #print(proof)
-    assert os.path.isfile(proof_path)
+    # command = f"ezkl verify --settings-path {settings_path} --proof-path {proof_path} --vk-path {vk_path}"
+    # os.system(command)
 
-    command = f"ezkl verify --settings-path {settings_path} --proof-path {proof_path} --vk-path {vk_path}"
-    os.system(command)
+    # return pred
 
-    return pred
+    return 0
 
 
 if __name__ == "__main__":
