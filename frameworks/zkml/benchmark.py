@@ -126,8 +126,8 @@ def cnn_datasets(dataset_name=None,args=None):
         test_images_tf = (test_images_tf - cifar100_nm[1]) / cifar100_nm[0]
 
         # train_images_tf = train_images_tf.reshape(train_images.shape[0], 32, 32, 3)
-        # test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
-        test_images_tf = test_images_tf.reshape(test_images.shape[0], 3, 32, 32)
+        test_images_tf = test_images_tf.reshape(test_images.shape[0], 32, 32, 3)
+        # test_images_tf = test_images_tf.reshape(test_images.shape[0], 3, 32, 32)
 
         # shuffle the test images and corresponding labels
         indices = np.random.permutation(test_images_tf.shape[0])
