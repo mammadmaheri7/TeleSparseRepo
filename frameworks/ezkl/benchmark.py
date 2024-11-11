@@ -506,7 +506,10 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         # Extract the verification time from the stdout
         match = re.search(r'verify took (\d+\.\d+)', stdout)
         if match:
-            verification_times.append(match.group(1)*10) # convert to ms
+            m = match.group(1)
+            # convert to int and convert to ms
+            m = float(m) * 10
+            verification_times.append(str(m)) # convert to ms
             print(f"Verification took: {match.group(1)} seconds")
         else:
             print("Verification time value not found")
@@ -558,7 +561,8 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
 
     new_row = {
         'Framework': ['ezkl (pytorch)'],
-        'Architecture': [f'{arch} ({"x".join(layers[:-1])}_{layers[-1]}x{layers[-1]})'],
+        # 'Architecture': [f'{arch} ({"x".join(layers[:-1])}_{layers[-1]}x{layers[-1]})'],
+        'Architecture': [f'{arch}'],
         '# Layers': [len(layers)-1],
         '# Parameters': [params[model_name]],
         'Testing Size': [len(mem_usage)],
@@ -1028,14 +1032,18 @@ if __name__ == "__main__":
         # do inference on the onnx model + dataset loading
         # TODO: uncomment the following line to do inference on the onnx model, after connecting the teleportaion on each image
         # predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,num_samples=args.size,args=args)
-        test_image = np.load(f"../../models/{arch_folder}/8.npy")
-        test_images = torch.tensor(test_image).unsqueeze(0)
-        predicted_labels = torch.tensor([75])
-        test_labels = torch.tensor([75])
-        # repeat the test_images, predicted_labels, test_labels for args.size times
-        test_images = test_images.repeat(args.size, 1, 1, 1)
-        predicted_labels = predicted_labels.repeat(args.size)
-        test_labels = test_labels.repeat(args.size)
+        if args.model == "resnet20":
+            test_image = np.load(f"../../models/{arch_folder}/8.npy")
+            test_images = torch.tensor(test_image).unsqueeze(0)
+            predicted_labels = torch.tensor([75])
+            test_labels = torch.tensor([75])
+            # repeat the test_images, predicted_labels, test_labels for args.size times
+            test_images = test_images.repeat(args.size, 1, 1, 1)
+            predicted_labels = predicted_labels.repeat(args.size)
+            test_labels = test_labels.repeat(args.size)
+        else:
+            print("EXPILITCI DATASET DID NOT IMPLEMENTED YET")
+            exit(1)
 
         # calculate the accuracy of original onnx model        
         accuracy_orignal_onnx = (predicted_labels == test_labels).sum().item() / len(test_labels)
