@@ -454,7 +454,9 @@ if __name__ == '__main__':
             break
         img, target = data
         img = img.squeeze(0)
-        img = img.permute(1, 2, 0)
+        # img = img.permute(1, 2, 0)
+        # assert that img shape is 3,32,32
+        assert img.shape == (3,32,32)
         img = img.numpy()
         # plt.imsave(args.prefix_dir + f"images/{i}.JPEG", img) 
         np.save(args.prefix_dir + f"images/{i}.npy", img)
@@ -507,12 +509,15 @@ if __name__ == '__main__':
                 img = np.load(args.prefix_dir + f"images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
                 # img = img.resize((32,32))
-                img = img.reshape(32,32,3)
+                # img = img.reshape(32,32,3)
                 # apply transformation
                 # cifar100_nm = transforms.Normalize((0.5071,0.4867,0.4408),(0.2675,0.2565,0.2761))
                 # transform_cifar = transforms.Compose([transforms.ToTensor(),cifar100_nm])
                 # data = transform_cifar(img).unsqueeze(0)
-                data = torch.tensor(img).permute(2,0,1).unsqueeze(0).float()
+                # assert img shape is 3,32,32
+                assert img.shape == (3,32,32)
+                # data = torch.tensor(img).permute(2,0,1).unsqueeze(0).float()
+                data = torch.tensor(img).unsqueeze(0).float()
                 print("=== data.shape:",data.shape)
 
                 # compute the output_orig and grad_orig dictionaries
@@ -595,10 +600,10 @@ if __name__ == '__main__':
                         for handle in hook_handles:
                             handle.remove()
                             
-                        # 4. define list of no teleportation
-                        topk = 3
-                        list_of_no_teleportation = [k for k, v in sorted(range_list_all.items(), key=lambda item: item[1])[:topk]]
-                        print("list_of_no_teleportation:",list_of_no_teleportation)
+                        # # 4. define list of no teleportation
+                        # topk = 3
+                        # list_of_no_teleportation = [k for k, v in sorted(range_list_all.items(), key=lambda item: item[1])[:topk]]
+                        # print("list_of_no_teleportation:",list_of_no_teleportation)
                        
                 # inference on original model
                 network_input_data = copy.deepcopy(data)
@@ -609,9 +614,11 @@ if __name__ == '__main__':
                 data_dict = dict(input_data = [((data).detach().numpy()).reshape([-1]).tolist()])
                 json.dump( data_dict, open(data_path, 'w' ))
 
+                print("---- GENRATE DATA IS: ----",data_path)
+
                 with torch.no_grad():
                     args.pred_mul = 0
-                    args.steps = 50
+                    args.steps = 100
                     args.cob_lr = 0.05
                     args.zoo_step_size = 0.0005
 
@@ -650,7 +657,7 @@ if __name__ == '__main__':
                     # Export the optimized model to ONNX
                     onnx_path = args.prefix_dir + f"resnet20_cob_activation_norm_teleported.onnx"
                     torch.onnx.export(    
-                        model,               # model being run
+                        export_model,               # model being run
                         dummy_input,                   # model input (or a tuple for multiple inputs)
                         onnx_path,            # where to save the model (can be a file or file-like object)
                         export_params=True,        # store the trained parameter weights inside the model file
@@ -723,7 +730,7 @@ if __name__ == '__main__':
 
                     # compute the new prediction of model (after all layers are teleported)
                     # new_pred = new_model(network_input_data)
-                    new_pred = LN.network(data)
+                    new_pred = export_model(data)
                     # check whether the teleportation is successful
                     print("MAX ARGUMENT NEW PREDICTION:", new_pred.argmax())
                     print("ORIGINAL PREDICTION:", result.argmax())
@@ -740,3 +747,9 @@ if __name__ == '__main__':
                     break
 
             break
+
+
+
+    
+
+
