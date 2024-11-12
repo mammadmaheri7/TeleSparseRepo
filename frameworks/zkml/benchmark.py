@@ -387,8 +387,8 @@ def benchmark(test_images, predictions, model_name, model_in_path, circuit_folde
 
     if model_name == "resnet20":
         scale_factor = (2**12)
-        k = 21
-        num_cols = 32
+        k = 19
+        num_cols = 128
         num_randoms = 1024 * 32
     elif model_name == "mobilenetv1":
         scale_factor = (2**12)
