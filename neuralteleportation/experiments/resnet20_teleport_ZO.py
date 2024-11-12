@@ -23,6 +23,17 @@ from neuralteleportation.layers.activation import ReLUCOB
 from neuralteleportation.layers.neuron import BatchNorm2dCOB
 from neuralteleportation.neuralteleportationmodel import NeuralTeleportationModel
 
+import torchvision.transforms as transforms
+from PIL import Image
+import os
+import random
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+import numpy as np
+import matplotlib.pyplot as plt
+import torchvision
+from torch.utils.data import DataLoader
+
 # define global variable to store the best loss found
 global best_loss
 global cor_best_pred_error
@@ -276,7 +287,31 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
 
 
 
+def set_onnx_size(args, BATCHS, onnx_path):
+    on = onnx.load(onnx_path)
+    for tensor in on.graph.input:
+        for dim_proto in tensor.type.tensor_type.shape.dim:
+            print("dim_proto:",dim_proto)
+            if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
+                dim_proto.Clear()
+                dim_proto.dim_value = BATCHS   # fixed batch size
+    for tensor in on.graph.output:
+        for dim_proto in tensor.type.tensor_type.shape.dim:
+            if dim_proto.HasField("dim_param"):
+                dim_proto.Clear()
+                dim_proto.dim_value = BATCHS   # fixed batch size
+
+    onnx.save(on, onnx_path)
+    on = onnx.load(onnx_path)
+    on = onnx.shape_inference.infer_shapes(on)
+    onnx.save(on, onnx_path)
+
 if __name__ == '__main__':
+    # define one arguemnt named teleport_dense_model (bool with default value False)
+    parser = argparse.ArgumentParser(description='Teleportation of a ResNet20 model trained on CIFAR-100')
+    parser.add_argument('--teleport_dense_model', type=bool, default=False, help='Teleport the dense model')
+    args = parser.parse_args()
+
     # set spawn start method
     mp.set_start_method('spawn', force=True)
     default_input_param_scale = 7
@@ -285,18 +320,23 @@ if __name__ == '__main__':
     default_scale_rebase_multiplier = 1
     defualt_hessian_sensitivity = False
 
-    args = argparse.Namespace()
+    # args = argparse.Namespace()
     args.batch_size = 1
     args.prefix_dir = "resnet20_teleport_ZO_temp/"
     # args.pretrained_model_path = '../models/model_zoo/rd1_resnet20_sparse50.pth.tar'
-    args.pretrained_model_path = args.prefix_dir + "/inputs" + "/rd1.pth.tar"
+
+    if not args.teleport_dense_model:
+        args.pretrained_model_path = args.prefix_dir + "/inputs" + "/rd1.pth.tar"
+    else:
+        args.pretrained_model_path = args.prefix_dir + "/inputs" + "/unpruned.pth.tar"
+
     args.hessian_sensitivity = False
 
     # Create the prefix directory if it does not exist
     os.makedirs(args.prefix_dir, exist_ok=True)
     BATCHS = args.batch_size
 
-    # model = build_model(args, pretrained=False)
+    # Load the pretrained model (named sparse_model but could be dense if args.teleport_dense_model is True)
     pretrained_sparse_model_state_dict = torch.load(args.pretrained_model_path, map_location='cpu')
     pretrained_sparse_model_state_dict = apply_mask_and_zero_out(pretrained_sparse_model_state_dict)
 
@@ -305,6 +345,7 @@ if __name__ == '__main__':
     pretrained_sparse_model.load_state_dict(pretrained_sparse_model_state_dict, strict=True)
     pretrained_sparse_model.eval()
 
+    # instantiate the cob model
     resnet20_cob = Resnet20Cifar100CobFlat(num_classes=100)
     new_sparse_state_dict = adjust_state_dict_keys(pretrained_sparse_model_state_dict)
     resnet20_cob.load_state_dict(new_sparse_state_dict, strict=True)
@@ -319,14 +360,12 @@ if __name__ == '__main__':
             module.eps = 1e-5
 
     
-    print("resnet20_cob: ",resnet20_cob)
-    # pretrained_sparse_model.eval()
-    
+    # print("resnet20_cob: ",resnet20_cob)
     
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
-    # test model works like the pretrained model
+    # test model works like the pretrained model (sparse)
     input = torch.randn(1, 3, 32, 32)
     output_model = model(input)
     output_pretrained = pretrained_sparse_model(input)
@@ -344,8 +383,7 @@ if __name__ == '__main__':
     print(f"Number of zeros: {zeros}")
     print(f"Percentage of zeros: {zeros / total_params * 100:.2f}%")
 
-    model = model.cpu()
-    model.eval()
+    model = model.cpu().eval()
 
     if not args.hessian_sensitivity:
         for param in model.parameters():
@@ -355,11 +393,12 @@ if __name__ == '__main__':
     x = input.detach().clone()
     print("x.shape:",x.shape)
 
-    # Export the model
+    out_onnx_name = "network_complete.onnx" if not args.teleport_dense_model else "network_complete_dense.onnx"
+    # Export the model (cob model sparse)
     torch.onnx.export(    
         model,               # model being run
         x,                   # model input (or a tuple for multiple inputs)
-        args.prefix_dir + "network_complete.onnx",            # where to save the model (can be a file or file-like object)
+        args.prefix_dir + out_onnx_name,            # where to save the model (can be a file or file-like object)
         export_params=True,        # store the trained parameter weights inside the model file
         opset_version=15,          # the ONNX version to export the model to
         do_constant_folding=True,  # whether to execute constant folding for optimization
@@ -370,24 +409,8 @@ if __name__ == '__main__':
         },         
     )
 
-    # makin the network_complete.onnx fixed batch size
-    on = onnx.load(args.prefix_dir + "network_complete.onnx")
-    for tensor in on.graph.input:
-        for dim_proto in tensor.type.tensor_type.shape.dim:
-            print("dim_proto:",dim_proto)
-            if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
-                dim_proto.Clear()
-                dim_proto.dim_value = BATCHS   # fixed batch size
-    for tensor in on.graph.output:
-        for dim_proto in tensor.type.tensor_type.shape.dim:
-            if dim_proto.HasField("dim_param"):
-                dim_proto.Clear()
-                dim_proto.dim_value = BATCHS   # fixed batch size
-
-    onnx.save(on, args.prefix_dir + "network_complete.onnx")
-    on = onnx.load(args.prefix_dir + "network_complete.onnx")
-    on = onnx.shape_inference.infer_shapes(on)
-    onnx.save(on, args.prefix_dir + "network_complete.onnx")
+    # making the network_complete.onnx fixed batch size
+    set_onnx_size(args, BATCHS, args.prefix_dir + out_onnx_name)
 
     # generate data for all layers
     data_path = os.path.join(os.getcwd(),args.prefix_dir, "input_convs.json")
@@ -403,11 +426,6 @@ if __name__ == '__main__':
                 'EXPERIMENT SETTINGS',
                 'Layer_Index', 'Sample_Name',
                 'Activation_Loss_Org', 'Range_Error' ,'Prediction_Error',
-                # # 'Activation_Loss',
-                # 'Input_Scale', 'Param_Scale', 'Scale_Rebase_Multiplier',
-                # 'Lookup_Range_0', 'Lookup_Range_1', 'Logrows', 'Num_Rows', 'Num_cols', 'Total_Assignments',
-                # 'Total_Constant_Size', 'Model_Output_Scales', 
-                # 'Required_Range_Checks_0','Required_Range_Checks_1', 'Proof_Time_Seconds', 'Max_Memory' ,'Mean_Squared_Error', 'Mean_Abs_Percent_Error',
         ])
             
     array_param_visibility = ["fixed"]
@@ -425,45 +443,32 @@ if __name__ == '__main__':
         list_of_no_teleportation = []
 
     # save 10 random images of CIFAR10 in the prefix_dir/images
-    import torchvision.transforms as transforms
-    from PIL import Image
-    import os
-    import random
-    import torchvision.datasets as datasets
-    import torchvision.transforms as transforms
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import torchvision
-    from torch.utils.data import DataLoader
+    if not args.teleport_dense_model:
+        os.makedirs(args.prefix_dir + "images", exist_ok=True)
+        # remove previous images
+        for file in os.listdir(args.prefix_dir + "images"):
+            os.remove(os.path.join(args.prefix_dir + "images", file))
 
-    os.makedirs(args.prefix_dir + "images", exist_ok=True)
-    # remove previous images
-    for file in os.listdir(args.prefix_dir + "images"):
-        os.remove(os.path.join(args.prefix_dir + "images", file))
     # download the CIFAR100 dataset
-
     transform_test = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))  # Mean and std for CIFAR-100
     ])
     testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
     testloader = DataLoader(testset, batch_size=1, shuffle=True)
-    # save 10 images
-    for i, data in enumerate(testloader):
-        if i == 10:
-            break
-        img, target = data
-        img = img.squeeze(0)
-        # img = img.permute(1, 2, 0)
-        # assert that img shape is 3,32,32
-        assert img.shape == (3,32,32)
-        img = img.numpy()
-        # plt.imsave(args.prefix_dir + f"images/{i}.JPEG", img) 
-        np.save(args.prefix_dir + f"images/{i}.npy", img)
 
+    if not args.teleport_dense_model:
+        # save 10 images
+        for i, data in enumerate(testloader):
+            if i == 10:
+                break
+            img, target = data
+            img = img.squeeze(0)
+            assert img.shape == (3,32,32)
+            img = img.numpy()
+            np.save(args.prefix_dir + f"images/{i}.npy", img)
 
     list_jpeg = os.listdir(args.prefix_dir + "images")
-    # list_jpeg = [x for x in list_jpeg if x.endswith(".JPEG")]
     list_jpeg = [x for x in list_jpeg if x.endswith(".npy")]
 
     # Evaluate the model on the CIFAR-100 dataset
@@ -482,9 +487,9 @@ if __name__ == '__main__':
     teleport_correct = 0
     teleport_total = 0
 
-    print("========= START =========")
-    print(model)
-    print("========= END =========")
+    # print("========= START =========")
+    # print(model)
+    # print("========= END =========")
 
     # with no gradient pytorch
     # with torch.no_grad():
@@ -493,7 +498,7 @@ if __name__ == '__main__':
         for p in combinations:
             param_visibility, input_param_scale, num_cols, max_log_rows, scale_rebase, lookup_margin = p
             # string experiment_settings as comma separated values
-            experiment_settings = f"{param_visibility}/{input_param_scale}/{num_cols}/{max_log_rows}/{scale_rebase}/{lookup_margin}"
+            experiment_settings = f"{param_visibility}/{input_param_scale}/{num_cols}/{max_log_rows}/{scale_rebase}/{lookup_margin}/{args.teleport_dense_model}"
             print("========= START =========")
             print(f"input_param_scale: {input_param_scale}, num_cols: {num_cols}, max_log_rows: {max_log_rows}, param_visibility: {param_visibility}, lookup_margin: {lookup_margin}")
 
@@ -508,17 +513,8 @@ if __name__ == '__main__':
                 # img = Image.open(args.prefix_dir + f"images/{jpeg_path}")
                 img = np.load(args.prefix_dir + f"images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
-                # img = img.resize((32,32))
-                # img = img.reshape(32,32,3)
-                # apply transformation
-                # cifar100_nm = transforms.Normalize((0.5071,0.4867,0.4408),(0.2675,0.2565,0.2761))
-                # transform_cifar = transforms.Compose([transforms.ToTensor(),cifar100_nm])
-                # data = transform_cifar(img).unsqueeze(0)
-                # assert img shape is 3,32,32
                 assert img.shape == (3,32,32)
-                # data = torch.tensor(img).permute(2,0,1).unsqueeze(0).float()
                 data = torch.tensor(img).unsqueeze(0).float()
-                print("=== data.shape:",data.shape)
 
                 # compute the output_orig and grad_orig dictionaries
                 activations_orig = None
@@ -599,11 +595,6 @@ if __name__ == '__main__':
                         # 3. remove the hooks
                         for handle in hook_handles:
                             handle.remove()
-                            
-                        # # 4. define list of no teleportation
-                        # topk = 3
-                        # list_of_no_teleportation = [k for k, v in sorted(range_list_all.items(), key=lambda item: item[1])[:topk]]
-                        # print("list_of_no_teleportation:",list_of_no_teleportation)
                        
                 # inference on original model
                 network_input_data = copy.deepcopy(data)
@@ -648,14 +639,21 @@ if __name__ == '__main__':
                     print("BEST LOSS:",best_loss)
                     LN = LN.teleport(best_cob, reset_teleportation=True)
                     # save the .pth of the teleported model
-                    torch.save(LN.network.state_dict(), args.prefix_dir + f'resnet20_cob_activation_norm_teleported.pth')
+                    if not args.teleport_dense_model:
+                        torch.save(LN.network.state_dict(), args.prefix_dir + f'resnet20_cob_activation_norm_teleported.pth')
+                    else:
+                        torch.save(LN.network.state_dict(), args.prefix_dir + f'resnet20_cob_activation_norm_teleported_dense.pth')
 
                     LN.eval()
                     LN.network.eval()
                     export_model = LN.network.eval().cpu()
                     dummy_input = torch.randn(1, 3, 32, 32)
                     # Export the optimized model to ONNX
-                    onnx_path = args.prefix_dir + f"resnet20_cob_activation_norm_teleported.onnx"
+                    if not args.teleport_dense_model:
+                        onnx_path = args.prefix_dir + f"resnet20_cob_activation_norm_teleported.onnx"
+                    else:
+                        onnx_path = args.prefix_dir + f"resnet20_cob_activation_norm_teleported_dense.onnx"
+
                     torch.onnx.export(    
                         export_model,               # model being run
                         dummy_input,                   # model input (or a tuple for multiple inputs)
@@ -669,24 +667,6 @@ if __name__ == '__main__':
                                         'output': {0:'batch_size'},
                         },         
                     )
-                    # # making the resnet20_cob_activation_norm_teleported.onnx fixed batch size
-                    # on = onnx.load(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
-                    # for tensor in on.graph.input:
-                    #     for dim_proto in tensor.type.tensor_type.shape.dim:
-                    #         if dim_proto.HasField("dim_param"):
-                    #             dim_proto.Clear()
-                    #             dim_proto.dim_value = BATCHS
-                    # for tensor in on.graph.output:
-                    #     for dim_proto in tensor.type.tensor_type.shape.dim:
-                    #         if dim_proto.HasField("dim_param"):
-                    #             dim_proto.Clear()
-                    #             dim_proto.dim_value = BATCHS
-                    # onnx.save(on, args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
-                    # on = onnx.load(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
-                    # on = onnx.shape_inference.infer_shapes(on)
-                    # onnx.save(on, args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
-                    # # check the validation of the teleportation
-                    # onnx.checker.check_model(args.prefix_dir + "resnet20_cob_activation_norm_teleported.onnx")
 
                     BATCHS = 1
                     on = onnx.load(onnx_path)
