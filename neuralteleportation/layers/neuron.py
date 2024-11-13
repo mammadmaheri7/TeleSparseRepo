@@ -413,9 +413,9 @@ class BatchNorm1dCOB(BatchNormMixin, nn.BatchNorm1d):
 
 
 class LayerNormCOB(BatchNormMixin, nn.LayerNorm):
-    reshape_cob = True
+    reshape_cob = False
     num_features: int
-    last_cob = True
+    last_cob = False
    
     # def _forward(self, input: torch.Tensor) -> torch.Tensor:
     #     return self.base_layer().forward(self, input / self.next_cob)
@@ -428,7 +428,7 @@ class LayerNormCOB(BatchNormMixin, nn.LayerNorm):
         self.out_features = num_features
         self.num_features = num_features
         # then call the parent constructor
-        BatchNormMixin.__init__(self, num_features, last_cob=True)
+        BatchNormMixin.__init__(self, num_features,last_cob=False)
 
     def get_nb_params(self) -> int:
         """Get the number of parameters in the layer (weight and bias).

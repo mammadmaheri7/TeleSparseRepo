@@ -30,16 +30,17 @@ class COBForwardMixin(object):
             else:
                 setattr(self, self.cob_field, torch.ones(input.shape[1]))
 
-        if self.last_cob:
-            # print("====== state 1 happed ====== , input.shape:",input.shape)
-            cob_shape = (input.shape[-1],) + (1,) * (input.dim() - 2)
-        else:
-            # print("====== state 2 happed ====== , input.shape:",input.shape)
-            cob_shape = (input.shape[1],) + tuple([1 for _ in range(input.dim() - 2)])
+        if self.reshape_cob:
+            if self.last_cob:
+                # print("====== state 1 happed ====== , input.shape:",input.shape)
+                cob_shape = (input.shape[-1],) + (1,) * (input.dim() - 2)
+            else:
+                # print("====== state 2 happed ====== , input.shape:",input.shape)
+                cob_shape = (input.shape[1],) + tuple([1 for _ in range(input.dim() - 2)])
             
-        # cob_view = getattr(self, self.cob_field).view(cob_shape).float().type_as(input).detach()
-        cob_view = getattr(self, self.cob_field).view(cob_shape).float().type_as(input)
-        setattr(self, self.cob_field, cob_view)
+            # cob_view = getattr(self, self.cob_field).view(cob_shape).float().type_as(input).detach()
+            cob_view = getattr(self, self.cob_field).view(cob_shape).float().type_as(input)
+            setattr(self, self.cob_field, cob_view)
 
         return self._forward(input)
 
