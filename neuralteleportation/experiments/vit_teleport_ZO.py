@@ -1853,11 +1853,13 @@ if __name__ == '__main__':
     x = data.detach().clone()
     print("x.shape:",x.shape)
 
+    onnx_path = args.prefix_dir + "network_complete.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_complete_{args.pruning_method}.onnx"
+
     # Export the model
     torch.onnx.export(    
         model,               # model being run
         x,                   # model input (or a tuple for multiple inputs)
-        args.prefix_dir + "network_complete.onnx",            # where to save the model (can be a file or file-like object)
+        onnx_path,            # where to save the model (can be a file or file-like object)
         export_params=True,        # store the trained parameter weights inside the model file
         opset_version=15,          # the ONNX version to export the model to
         do_constant_folding=True,  # whether to execute constant folding for optimization
@@ -1876,7 +1878,7 @@ if __name__ == '__main__':
             print("layer_idx:\t",layer_idx,"\t half:",str(half),"\t inter_out.shape:",inter_out.shape,"\t min:",inter_out.min(),"\t max:",inter_out.max())
 
     import onnx
-    on = onnx.load(args.prefix_dir + "network_complete.onnx")
+    on = onnx.load(onnx_path)
     for tensor in on.graph.input:
         for dim_proto in tensor.type.tensor_type.shape.dim:
             print("dim_proto:",dim_proto)
@@ -1888,11 +1890,10 @@ if __name__ == '__main__':
             if dim_proto.HasField("dim_param"):
                 dim_proto.Clear()
                 dim_proto.dim_value = BATCHS   # fixed batch size
-
-    onnx.save(on, args.prefix_dir + "network_complete.onnx")
-    on = onnx.load(args.prefix_dir + "network_complete.onnx")
+    onnx.save(on, onnx_path)
+    on = onnx.load(onnx_path)
     on = onnx.shape_inference.infer_shapes(on)
-    onnx.save(on, args.prefix_dir + "network_complete.onnx")
+    onnx.save(on, onnx_path)
 
     # generate data for all layers
     data_path = os.path.join(os.getcwd(),args.prefix_dir, "input_convs.json")
@@ -1909,10 +1910,12 @@ if __name__ == '__main__':
     import onnx
     # extract all onnx files of layers
 
-    input_path = args.prefix_dir + "network_complete.onnx"
+    # input_path = args.prefix_dir + "network_complete.onnx"
+    input_path = onnx_path
 
     # Convs layer
-    output_path = args.prefix_dir + "network_split_convs.onnx"
+    # output_path = args.prefix_dir + "network_split_convs.onnx"
+    output_path = args.prefix_dir + "network_split_convs.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_convs_{args.pruning_method}.onnx"
     input_names = ["input"]
     output_names = ["/Add_output_0"]
     onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
@@ -1920,7 +1923,8 @@ if __name__ == '__main__':
 
     for layer_idx in range(model.depth):
         for half in [True,False]:        
-            output_path = f"{args.prefix_dir}network_split_{layer_idx}_{str(half)}.onnx"
+            # output_path = f"{args.prefix_dir}network_split_{layer_idx}_{str(half)}.onnx"
+            output_path = args.prefix_dir + f"network_split_{layer_idx}_{str(half)}.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_{layer_idx}_{str(half)}_{args.pruning_method}.onnx"
             
             if half:
                 output_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
@@ -1947,11 +1951,6 @@ if __name__ == '__main__':
                 'EXPERIMENT SETTINGS',
                 'Layer_Index', 'Sample_Name',
                 'Activation_Loss_Org', 'Range_Error' ,'Prediction_Error',
-                # # 'Activation_Loss',
-                # 'Input_Scale', 'Param_Scale', 'Scale_Rebase_Multiplier',
-                # 'Lookup_Range_0', 'Lookup_Range_1', 'Logrows', 'Num_Rows', 'Num_cols', 'Total_Assignments',
-                # 'Total_Constant_Size', 'Model_Output_Scales', 
-                # 'Required_Range_Checks_0','Required_Range_Checks_1', 'Proof_Time_Seconds', 'Max_Memory' ,'Mean_Squared_Error', 'Mean_Abs_Percent_Error',
         ])
             
     array_param_visibility = ["fixed"]
@@ -2000,6 +1999,7 @@ if __name__ == '__main__':
             list_jpeg = list(reversed(list_jpeg))
 
             for jpeg_path in list_jpeg:
+                print("========== jpeg_path:",jpeg_path, " ==========")
                 img = Image.open(f"./sparse-cap-acc-tmp/images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
                 img = img.resize((224,224))
@@ -2098,7 +2098,7 @@ if __name__ == '__main__':
                 json.dump( data_dict, open(data_path, 'w' ))
 
                 with torch.no_grad():
-                    for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:
+                    for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:  # Parallelize this loop since it's independent for each layer
                         args.pred_mul = 2.5
                         args.steps = 200
                         args.cob_lr = 0.2
@@ -2151,7 +2151,9 @@ if __name__ == '__main__':
                             print("====== NO OPTIMIZATION SINCE NO TELEPORTATION =====")
                             best_loss = torch.tensor(best_loss).detach().cpu()
                             LN = LN.teleport(torch.ones_like(torch.ones(960)), reset_teleportation=True)
-                            torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
+                            # torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
+                            save_path = args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth' if args.pruning_method == "CAP" else args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported_{args.pruning_method}.pth'
+                            torch.save(LN.network.state_dict(), save_path)
                             cor_best_range = 1
                             cor_best_pred_error = 0
                         # check whether the teleportation .pth already exists
@@ -2168,7 +2170,9 @@ if __name__ == '__main__':
                             print("BEST LOSS:",best_loss)
                             LN = LN.teleport(best_cob, reset_teleportation=True)
                             # save the .pth of the teleported model
-                            torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
+                            # torch.save(LN.network.state_dict(), args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth')
+                            save_path = args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.pth' if args.pruning_method == "CAP" else args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported_{args.pruning_method}.pth'
+                            torch.save(LN.network.state_dict(), save_path)
                         
                         # Apply the teleportation to the new_model (Using for computing the next layer inputs)
                         sd = LN.network.state_dict()
@@ -2179,12 +2183,13 @@ if __name__ == '__main__':
                         new_model.blocks[layer_idx].norm2.load_state_dict(sd)
 
                         # Export the optimized model to ONNX
-                        torch.onnx.export(LN.network, input_teleported_model, args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.onnx', verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
+                        onnx_path = args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.onnx' if args.pruning_method == "CAP" else args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported_{args.pruning_method}.onnx'
+                        torch.onnx.export(LN.network, input_teleported_model, onnx_path, verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
 
                         # check the validation of the teleportation
                         # 1.extract onnx corrosponding to the teleported model (in original onnx)
-                        input_path = args.prefix_dir + f"network_split_{layer_idx}_False.onnx"
-                        output_path = args.prefix_dir + f"block{layer_idx}_cob_activation_norm.onnx"
+                        input_path = args.prefix_dir + f"network_split_{layer_idx}_False.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_{layer_idx}_False_{args.pruning_method}.onnx"
+                        output_path = args.prefix_dir + f"block{layer_idx}_cob_activation_norm.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"block{layer_idx}_cob_activation_norm_{args.pruning_method}.onnx"
                         input_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
                         output_names = [f"/blocks.{layer_idx}/mlp/fc2/Add_output_0"]
                         onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)

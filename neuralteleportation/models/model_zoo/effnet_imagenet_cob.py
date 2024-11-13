@@ -52,279 +52,10 @@ class BasicBlock(nn.Module):
         return out
 
 
-NUM_CLASSES = 100
-class ResNetCifar(nn.Module):
+NUM_CLASSES = 1000
 
-    def __init__(self, block, layers, num_classes=NUM_CLASSES):
-        self.nlayers = 0
-        # Each layer manages its own gates
-        self.layer_gates = []
-        for layer in range(3):
-            # For each of the 3 layers, create block gates: each block has two layers
-            self.layer_gates.append([])  # [True, True] * layers[layer])
-            for blk in range(layers[layer]):
-                self.layer_gates[layer].append([True, True])
 
-        self.inplanes = 16  # 64
-        super(ResNetCifar, self).__init__()
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(self.inplanes)
-        self.relu = nn.ReLU(inplace=False)
-        self.layer1 = self._make_layer(self.layer_gates[0], block, 16, layers[0])
-        self.layer2 = self._make_layer(self.layer_gates[1], block, 32, layers[1], stride=2)
-        self.layer3 = self._make_layer(self.layer_gates[2], block, 64, layers[2], stride=2)
-        self.avgpool = nn.AvgPool2d(8, stride=1)
-        self.fc = nn.Linear(64 * block.expansion, num_classes)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
-    def _make_layer(self, layer_gates, block, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-
-        layers = []
-        layers.append(block(layer_gates[0], self.inplanes, planes, stride, downsample))
-        self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
-            layers.append(block(layer_gates[i], self.inplanes, planes))
-
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-
-        return x
-
-def resnet20_cifar100(pretrained=False, **kwargs):
-    model = ResNetCifar(BasicBlock, [3, 3, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(torch.load(weight_dict['resnet20_cifar'])["model_state_dict"])
-    return model
-
-class Resnet20Cifar100CobFlat(nn.Module):
-    def __init__(self, num_classes=100):
-        super(Resnet20Cifar100CobFlat, self).__init__()
-
-        # Initial conv layer
-        self.conv1 = Conv2dCOB(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = BatchNorm2dCOB(16)
-        self.relu1 = ReLUCOB(inplace=False)
-
-        # Layer 1 Block 1
-        self.layer1_0_conv1 = Conv2dCOB(16, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1_0_bn1 = BatchNorm2dCOB(16)
-        self.relu1_1 = ReLUCOB(inplace=False)
-        self.layer1_0_conv2 = Conv2dCOB(16, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1_0_bn2 = BatchNorm2dCOB(16)
-        self.relu1_1_second = ReLUCOB(inplace=False)
-        self.layer1_0_add = Add()
-
-        # Layer 1 Block 2
-        self.layer1_1_conv1 = Conv2dCOB(16, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1_1_bn1 = BatchNorm2dCOB(16)
-        self.relu1_2 = ReLUCOB(inplace=False)
-        self.layer1_1_conv2 = Conv2dCOB(16, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1_1_bn2 = BatchNorm2dCOB(16)
-        self.relu1_2_second = ReLUCOB(inplace=False)
-        self.layer1_1_add = Add()
-
-        # Layer 1 Block 3
-        self.layer1_2_conv1 = Conv2dCOB(16, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1_2_bn1 = BatchNorm2dCOB(16)
-        self.relu1_3 = ReLUCOB(inplace=False)
-        self.layer1_2_conv2 = Conv2dCOB(16, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1_2_bn2 = BatchNorm2dCOB(16)
-        self.relu1_3_second = ReLUCOB(inplace=False)
-        self.layer1_2_add = Add()
-
-        # Layer 2 Block 1 (with downsampling)
-        self.layer2_0_conv1 = Conv2dCOB(16, 32, kernel_size=3, stride=2, padding=1, bias=False)
-        self.layer2_0_bn1 = BatchNorm2dCOB(32)
-        self.relu2_1 = ReLUCOB(inplace=False)
-        self.layer2_0_conv2 = Conv2dCOB(32, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer2_0_bn2 = BatchNorm2dCOB(32)
-        self.relu2_1_second = ReLUCOB(inplace=False)
-        self.layer2_0_downsample_conv = Conv2dCOB(16, 32, kernel_size=1, stride=2, bias=False)
-        self.layer2_0_downsample_bn = BatchNorm2dCOB(32)
-        self.layer2_0_add = Add()
-
-        # Layer 2 Block 2
-        self.layer2_1_conv1 = Conv2dCOB(32, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer2_1_bn1 = BatchNorm2dCOB(32)
-        self.relu2_2 = ReLUCOB(inplace=False)
-        self.layer2_1_conv2 = Conv2dCOB(32, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer2_1_bn2 = BatchNorm2dCOB(32)
-        self.relu2_2_second = ReLUCOB(inplace=False)
-        self.layer2_1_add = Add()
-
-        # Layer 2 Block 3
-        self.layer2_2_conv1 = Conv2dCOB(32, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer2_2_bn1 = BatchNorm2dCOB(32)
-        self.relu2_3 = ReLUCOB(inplace=False)
-        self.layer2_2_conv2 = Conv2dCOB(32, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer2_2_bn2 = BatchNorm2dCOB(32)
-        self.relu2_3_second = ReLUCOB(inplace=False)
-        self.layer2_2_add = Add()
-
-        # Layer 3 Block 1 (with downsampling)
-        self.layer3_0_conv1 = Conv2dCOB(32, 64, kernel_size=3, stride=2, padding=1, bias=False)
-        self.layer3_0_bn1 = BatchNorm2dCOB(64)
-        self.relu3_1 = ReLUCOB(inplace=False)
-        self.layer3_0_conv2 = Conv2dCOB(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer3_0_bn2 = BatchNorm2dCOB(64)
-        self.layer3_0_downsample_conv = Conv2dCOB(32, 64, kernel_size=1, stride=2, bias=False)
-        self.layer3_0_downsample_bn = BatchNorm2dCOB(64)
-        self.relu3_1_second = ReLUCOB(inplace=False)
-        self.layer3_0_add = Add()
-
-        # Layer 3 Block 2
-        self.layer3_1_conv1 = Conv2dCOB(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer3_1_bn1 = BatchNorm2dCOB(64)
-        self.relu3_2 = ReLUCOB(inplace=False)
-        self.layer3_1_conv2 = Conv2dCOB(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer3_1_bn2 = BatchNorm2dCOB(64)
-        self.relu3_2_second = ReLUCOB(inplace=False)
-        self.layer3_1_add = Add()
-
-        # Layer 3 Block 3
-        self.layer3_2_conv1 = Conv2dCOB(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer3_2_bn1 = BatchNorm2dCOB(64)
-        self.relu3_3 = ReLUCOB(inplace=False)
-        self.layer3_2_conv2 = Conv2dCOB(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer3_2_bn2 = BatchNorm2dCOB(64)
-        self.relu3_3_second = ReLUCOB(inplace=False)
-        self.layer3_2_add = Add()
-
-        # Pooling and Fully Connected layers
-        self.avgpool = AvgPool2dCOB(kernel_size=8, stride=1)
-        self.flatten = FlattenCOB()
-        self.fc = LinearCOB(64, num_classes)
-
-    def forward(self, x):
-        # Initial layer
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-
-        # Layer 1 Block 1
-        residual = x
-        x = self.layer1_0_conv1(x)
-        x = self.layer1_0_bn1(x)
-        x = self.relu1_1(x)
-        x = self.layer1_0_conv2(x)
-        x = self.layer1_0_bn2(x)
-        x = self.layer1_0_add(residual, x)
-        x = self.relu1_1_second(x)
-
-        # Layer 1 Block 2
-        residual = x
-        x = self.layer1_1_conv1(x)
-        x = self.layer1_1_bn1(x)
-        x = self.relu1_2(x)
-        x = self.layer1_1_conv2(x)
-        x = self.layer1_1_bn2(x)
-        x = self.layer1_1_add(residual, x)
-        x = self.relu1_2_second(x)
-
-        # Layer 1 Block 3
-        residual = x
-        x = self.layer1_2_conv1(x)
-        x = self.layer1_2_bn1(x)
-        x = self.relu1_3(x)
-        x = self.layer1_2_conv2(x)
-        x = self.layer1_2_bn2(x)
-        x = self.layer1_2_add(residual, x)
-        x = self.relu1_3_second(x)
-
-        # Layer 2 Block 1 (with downsampling)
-        residual = self.layer2_0_downsample_conv(x)
-        residual = self.layer2_0_downsample_bn(residual)
-        x = self.layer2_0_conv1(x)
-        x = self.layer2_0_bn1(x)
-        x = self.relu2_1(x)
-        x = self.layer2_0_conv2(x)
-        x = self.layer2_0_bn2(x)
-        x = self.layer2_0_add(residual, x)
-        x = self.relu2_1_second(x)
-
-        # Layer 2 Block 2
-        residual = x
-        x = self.layer2_1_conv1(x)
-        x = self.layer2_1_bn1(x)
-        x = self.relu2_2(x)
-        x = self.layer2_1_conv2(x)
-        x = self.layer2_1_bn2(x)
-        x = self.layer2_1_add(residual, x)
-        x = self.relu2_2_second(x)
-
-        # Layer 2 Block 3
-        residual = x
-        x = self.layer2_2_conv1(x)
-        x = self.layer2_2_bn1(x)
-        x = self.relu2_3(x)
-        x = self.layer2_2_conv2(x)
-        x = self.layer2_2_bn2(x)
-        x = self.layer2_2_add(residual, x)
-        x = self.relu2_3_second(x)
-
-        # Layer 3 Block 1 (with downsampling)
-        residual = self.layer3_0_downsample_conv(x)
-        residual = self.layer3_0_downsample_bn(residual)
-        x = self.layer3_0_conv1(x)
-        x = self.layer3_0_bn1(x)
-        x = self.relu3_1(x)
-        x = self.layer3_0_conv2(x)
-        x = self.layer3_0_bn2(x)
-        x = self.layer3_0_add(residual, x)
-        x = self.relu3_1_second(x)
-
-        # Layer 3 Block 2
-        residual = x
-        x = self.layer3_1_conv1(x)
-        x = self.layer3_1_bn1(x)
-        x = self.relu3_2(x)
-        x = self.layer3_1_conv2(x)
-        x = self.layer3_1_bn2(x)
-        x = self.layer3_1_add(residual, x)
-        x = self.relu3_2_second(x)
-
-        # Layer 3 Block 3
-        residual = x
-        x = self.layer3_2_conv1(x)
-        x = self.layer3_2_bn1(x)
-        x = self.relu3_3(x)
-        x = self.layer3_2_conv2(x)
-        x = self.layer3_2_bn2(x)
-        x = self.layer3_2_add(residual, x)
-        x = self.relu3_3_second(x)
-
-        # Pooling and classification
-        x = self.avgpool(x)
-        x = self.flatten(x)
-        x = self.fc(x)
-
-        return x
 
 
 def apply_mask_and_zero_out(state_dict):
@@ -387,7 +118,8 @@ class EfficientNetB0Flat(nn.Module):
         super(EfficientNetB0Flat, self).__init__()
 
         # Stem
-        self._conv_stem = nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False)
+        self._conv_stem_zero_pad = nn.ZeroPad2d((1, 0, 1, 0))
+        self._conv_stem = nn.Conv2d(3, 32, kernel_size=(3,3), stride=(2,2), padding=(1,1), bias=False,dilation=(2,2))
         self._bn0 = nn.BatchNorm2d(32)
 
         # Block 0
@@ -557,71 +289,62 @@ class EfficientNetB0Flat(nn.Module):
 
     def forward(self, x):
         # Stem
+        x = self._conv_stem_zero_pad(x)
         x = self._conv_stem(x)
         x = self._bn0(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # Block 0
-        residual = x
+        # residual = x
         x = self._blocks_0_depthwise_conv(x)
         x = self._blocks_0_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 0
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_0_se_reduce(x_se)
-        x_se = F.relu(x_se)
+        x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_0_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
 
         x = self._blocks_0_project_conv(x)
         x = self._blocks_0_bn2(x)
-        # x += residual  # Add the skip connection from the residual
-        # x = F.relu(x)
+        x = self._blocks_1_expand_conv(x)
+        x = self._blocks_1_bn0(x)
         x = x * torch.sigmoid(x)
 
         # Block 1
-        residual = x
-        x = self._blocks_1_expand_conv(x)
-        x = self._blocks_1_bn0(x)
-        # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # residual = x
+        # x = self._blocks_1_expand_conv(x)
+        # x = self._blocks_1_bn0(x)
+        # x = x * torch.sigmoid(x)
         x = self._blocks_1_depthwise_conv(x)
         x = self._blocks_1_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 1
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_1_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_1_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
 
         x = self._blocks_1_project_conv(x)
         x = self._blocks_1_bn2(x)
-        # x += residual  # Add the skip connection from the residual
-        # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 2
         residual = x
         x = self._blocks_2_expand_conv(x)
         x = self._blocks_2_bn0(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
         x = self._blocks_2_depthwise_conv(x)
         x = self._blocks_2_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 2
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_2_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_2_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
@@ -629,24 +352,20 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_2_project_conv(x)
         x = self._blocks_2_bn2(x)
         x += residual  # Add the skip connection from the residual
-        # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 3
-        residual = x
+        # residual = x
         x = self._blocks_3_expand_conv(x)
         x = self._blocks_3_bn0(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
         x = self._blocks_3_depthwise_conv(x)
         x = self._blocks_3_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 3
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_3_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_3_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
@@ -655,23 +374,20 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_3_bn2(x)
         # x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 4
         residual = x
         x = self._blocks_4_expand_conv(x)
         x = self._blocks_4_bn0(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
         x = self._blocks_4_depthwise_conv(x)
         x = self._blocks_4_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 4
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_4_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_4_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
@@ -679,24 +395,21 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_4_project_conv(x)
         x = self._blocks_4_bn2(x)
         x += residual  # Add the skip connection from the residual
-        # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 5
-        residual = x
+        # residual = x
         x = self._blocks_5_expand_conv(x)
         x = self._blocks_5_bn0(x)
         # x = F.relu(x)
         x = x * torch.sigmoid(x)
         x = self._blocks_5_depthwise_conv(x)
         x = self._blocks_5_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 5
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_5_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_5_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
@@ -705,7 +418,7 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_5_bn2(x)
         # x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 6
         residual = x
@@ -715,13 +428,11 @@ class EfficientNetB0Flat(nn.Module):
         x = x * torch.sigmoid(x)
         x = self._blocks_6_depthwise_conv(x)
         x = self._blocks_6_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 6
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_6_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_6_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
@@ -730,23 +441,20 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_6_bn2(x)
         x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 7
         residual = x
         x = self._blocks_7_expand_conv(x)
         x = self._blocks_7_bn0(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
         x = self._blocks_7_depthwise_conv(x)
         x = self._blocks_7_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 7
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_7_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_7_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
@@ -754,24 +462,20 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_7_project_conv(x)
         x = self._blocks_7_bn2(x)
         x += residual  # Add the skip connection from the residual
-        # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 8
         residual = x
         x = self._blocks_8_expand_conv(x)
         x = self._blocks_8_bn0(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
         x = self._blocks_8_depthwise_conv(x)
         x = self._blocks_8_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 8
         x_se = F.adaptive_avg_pool2d(x, 1)
         x_se = self._blocks_8_se_reduce(x_se)
-        # x_se = F.relu(x_se)
         x_se = x_se * torch.sigmoid(x_se)
         x_se = self._blocks_8_se_expand(x_se)
         x = x * torch.sigmoid(x_se)
@@ -780,7 +484,7 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_8_bn2(x)
         # x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 9
         residual = x
@@ -805,7 +509,7 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_9_bn2(x)
         x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 10
         residual = x
@@ -830,10 +534,10 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_10_bn2(x)
         x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 11
-        residual = x
+        # residual = x
         x = self._blocks_11_expand_conv(x)
         x = self._blocks_11_bn0(x)
         # x = F.relu(x)
@@ -855,7 +559,7 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_11_bn2(x)
         # x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 12
         residual = x
@@ -865,7 +569,6 @@ class EfficientNetB0Flat(nn.Module):
         x = x * torch.sigmoid(x)
         x = self._blocks_12_depthwise_conv(x)
         x = self._blocks_12_bn1(x)
-        # x = F.relu(x)
         x = x * torch.sigmoid(x)
 
         # SE for Block 12
@@ -880,7 +583,7 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_12_bn2(x)
         x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 13
         residual = x
@@ -905,7 +608,7 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_13_bn2(x)
         x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 14
         residual = x
@@ -930,10 +633,10 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_14_bn2(x)
         x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Block 15
-        residual = x
+        # residual = x
         x = self._blocks_15_expand_conv(x)
         x = self._blocks_15_bn0(x)
         # x = F.relu(x)
@@ -956,7 +659,7 @@ class EfficientNetB0Flat(nn.Module):
         x = self._blocks_15_bn2(x)
         # x += residual  # Add the skip connection from the residual
         # x = F.relu(x)
-        x = x * torch.sigmoid(x)
+        # x = x * torch.sigmoid(x)
 
         # Head
         x = self._conv_head(x)
@@ -1016,7 +719,20 @@ if __name__ == '__main__':
 
     # sample input
     # dummy imagenet input_data
-    input_data = torch.randn(1, 3, 224, 224)
+    # input_data = torch.randn(1, 3, 224, 224)
+    # instead of random image, load a jpeg image stored with name 'image.jpg' in the same directory
+    from PIL import Image
+    import torchvision.transforms as transforms
+    image = Image.open('image1.JPEG')
+    preprocess = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    input_tensor = preprocess(image)
+    input_data = input_tensor.unsqueeze(0)
+
 
     from efficientnet_pytorch import EfficientNet
     # import Swish
@@ -1027,48 +743,97 @@ if __name__ == '__main__':
     model.eval()
     model = model.cpu()
 
-    # hook all the activations functions of the model to compute range of input (max - min)
-    def activation_hook(name, activation_stats, activations_output=None, layer_idx=None):
-        def hook(module, input, output):
-            input_tensor = input[0]
-            activation_stats[name] = {'min': input_tensor.min().item(), 'max': input_tensor.max().item()}
-            if activations_output is not None:
-                # key of the dict is the layer number (extracted from the name)
-                activations_output[layer_idx] = output
-        return hook
-    
-    activation = {}
-    # for name, layer in model.named_modules():
-    activation_stats = {}
-    activations_quant = {}
-    hook_handles = []
-    layer_idx = 0
-    for i, layer in enumerate(model.children()):
-        if isinstance(layer, (nn.ReLU, ReLUCOB,nn.Sigmoid,Swish, MemoryEfficientSwish)):
-            handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats, activations_output=activations_quant,layer_idx=layer_idx))
-            hook_handles.append(handle)
-    
-    pred_model = model(input_data)
-    print("====================================================")
-    # print the all activations ranges
-    for key, value in activation_stats.items():
-        print(key, value)
 
-    for name, param in model.named_parameters():
-        print(name, "\t", param.size())
-    print("====================================================")
+
+    # export onnx model
+    # path is Desktop
+    # save_path = "/Users/mm6322/Desktop/efficientnet_b0.onnx"
+    # torch.onnx.export(model, input_data, save_path, verbose=True, opset_version=11, input_names = ['input'], output_names = ['output'], dynamic_axes={'input' : {0 : 'batch_size'}, 'output' : {0 : 'batch_size'}}, export_params=True, do_constant_folding=False)
+
+
+    # # hook all the activations functions of the model to compute range of input (max - min)
+    # def activation_hook(name, activation_stats, activations_output=None, layer_idx=None):
+    #     def hook(module, input, output):
+    #         input_tensor = input[0]
+    #         activation_stats[name] = {'min': input_tensor.min().item(), 'max': input_tensor.max().item()}
+    #         if activations_output is not None:
+    #             # key of the dict is the layer number (extracted from the name)
+    #             activations_output[layer_idx] = output
+    #     return hook
+    
+    # activation = {}
+    # # for name, layer in model.named_modules():
+    # activation_stats = {}
+    # activations_quant = {}
+    # hook_handles = []
+    # layer_idx = 0
+    # for i, layer in enumerate(model.children()):
+    #     if isinstance(layer, (nn.ReLU, ReLUCOB,nn.Sigmoid,Swish, MemoryEfficientSwish)):
+    #         handle = layer.register_forward_hook(activation_hook(f'relu_{i}', activation_stats=activation_stats, activations_output=activations_quant,layer_idx=layer_idx))
+    #         hook_handles.append(handle)
+    
+    # Define a dictionary to store the outputs of the hook
+    hook_outputs = {}
+
+    # Define the hook function
+    def hook_fn(module, input, output):
+        print(module)
+        hook_outputs['conv_stem_output'] = output
+
+    # Register the hook to the _conv_stem layer
+    model._conv_stem.register_forward_hook(hook_fn)
+
+
+    pred_model = model(input_data)
+
+    conv_stem_output = hook_outputs['conv_stem_output']
+
+    # print("====================================================")
+    # # print the all activations ranges
+    # for key, value in activation_stats.items():
+    #     print(key, value)
+
+    # for name, param in model.named_parameters():
+    #     print(name, "\t", param.size())
+    # print("====================================================")
 
     # model_cob = swap_model_modules_for_COB_modules(model)
     model_cob = EfficientNetB0Flat(num_classes=1000)
-    for name, param in model_cob.named_parameters():
-        print(name, "\t", param.size())
-    print("====================================================")
+    # for name, param in model_cob.named_parameters():
+    #     print(name, "\t", param.size())
+    # print("====================================================")
+
+    model_cob._conv_stem_zero_pad = model._conv_stem.static_padding
 
     # load the model weights on model_cob  
     new_state_dict = map_pretrained_weights(model.state_dict())
     model_cob.load_state_dict(new_state_dict, strict=True)
     model_cob.eval()
-    print(model_cob)
+    # print(model_cob)
+
+    hook_outputs = {}
+    model_cob._conv_stem.register_forward_hook(hook_fn)
+
+    pred_cob = model_cob(input_data)
+
+    conv_stem_output_cob = hook_outputs['conv_stem_output']
+
+    # print diff between the two models hook output
+    diff = torch.mean(torch.abs(conv_stem_output - conv_stem_output_cob)).item()
+    print("DIFF: ", diff)
+
+
+    # check the difference between the model weights of two models on module conv_stem
+    param1 = model._conv_stem.weight
+    param2 = model_cob._conv_stem.weight
+    diff = torch.mean(torch.abs(param1 - param2)).item()
+    print("DIFF PARAM: ", diff)
+
+
+
+
+    
+    pred_model = model(input_data)
     pred_cob = model_cob(input_data)
 
     # print diff between the two models
