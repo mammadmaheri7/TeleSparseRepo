@@ -1501,7 +1501,7 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
         pred_error /= np.abs(original_pred).mean()
         pred_error = pred_error.item()
     # TODO: change the 10 with args.pred_mul (adding that to the function signature)
-    total_loss = loss + 2.5 * pred_error
+    total_loss = loss + 10 * pred_error
 
     # if random.random() < 0.0005:
     #     print(f"pred_error: {pred_error} \t range_loss: {loss}")
@@ -2097,7 +2097,7 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:  # Parallelize this loop since it's independent for each layer
-                        args.pred_mul = 2.5
+                        args.pred_mul = 10
                         args.steps = 200
                         args.cob_lr = 0.2
                         args.zoo_step_size = 0.0005
@@ -2113,7 +2113,7 @@ if __name__ == '__main__':
                         # run the mlp model to find original_loss
                         # create input_convs based on 
                         input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
-                        original_block_idx_pred = model.split_n(torch.tensor(input_convs).view(BATCHS,3,224,224),layer_idx,half=False)
+                        _ = model.split_n(torch.tensor(input_convs).view(BATCHS,3,224,224),layer_idx,half=False)
                         # original_block_idx_pred = model(data)
 
                         for handle in hook_handles:
@@ -2133,10 +2133,13 @@ if __name__ == '__main__':
                         input_convs = json.load(open(args.prefix_dir + "input_convs.json"))["input_data"][0]
                         input_convs = torch.tensor(input_convs).view(1,3,224,224)
                         input_teleported_model = new_model.split_n(input_convs,layer_idx,half=True)
+
                         # save npy file using in python checking script
                         np.save(args.prefix_dir + f"input_teleported_model_{layer_idx}.npy", input_teleported_model.detach().numpy())
                         # define original_pred (used in ng_loss_function)
                         input_org = model.split_n(input_convs,layer_idx,half=True)
+
+                        print("debug1: diffrence between input_teleported_model and input_org:",torch.norm(input_teleported_model - input_org),"\t layer_idx:",layer_idx)
                         np.save(args.prefix_dir + f"input_org_{layer_idx}.npy", input_org.detach().numpy())
                         original_pred = model.blocks[layer_idx].mlp(model.blocks[layer_idx].norm2(input_org))
 
@@ -2144,6 +2147,7 @@ if __name__ == '__main__':
                         LN = LinearNet()
                         LN = NeuralTeleportationModel(LN, input_shape=(1, 197, 192))
                         load_ln_weights(LN, model, layer_idx)
+                        LN.eval()
 
                         if layer_idx in list_of_no_teleportation:
                             print("====== NO OPTIMIZATION SINCE NO TELEPORTATION =====")
@@ -2222,6 +2226,12 @@ if __name__ == '__main__':
                     time.sleep(2)
 
                     # export onnx for each split layer of the model
+                    # Convs layer
+                    output_path = args.prefix_dir + "network_split_convs.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_convs_{args.pruning_method}.onnx"
+                    input_names = ["input"]
+                    output_names = ["/Add_output_0"]
+                    onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
+                    input_names = output_names
                     print("====== EXPORT ONNX OF SPLITED NOT TELEPORTED LAYERS ======")
                     for layer_idx in range(model.depth):
                         for half in [True,False]:        
@@ -2238,6 +2248,12 @@ if __name__ == '__main__':
                             input_names = output_names
 
                     # export onnx for each split layer of the new_model (teleported model)
+                    # Convs layer
+                    output_path = args.prefix_dir + "network_split_convs_teleported.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_convs_teleported_{args.pruning_method}.onnx"
+                    input_names = ["input"]
+                    output_names = ["/Add_output_0"]
+                    onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
+                    input_names = output_names
                     print("====== EXPORT ONNX OF SPLITED TELEPORTED LAYERS ======")
                     for layer_idx in range(model.depth):
                         # Apply the teleportation to the new_model (Using for computing the next layer inputs)
