@@ -44,3 +44,4 @@ class ELUCOB(ActivationLayerMixin, nn.ELU):
 
 class GELUCOB(ActivationLayerMixin, nn.GELU):
     reshape_cob = True
+    last_cob = True
