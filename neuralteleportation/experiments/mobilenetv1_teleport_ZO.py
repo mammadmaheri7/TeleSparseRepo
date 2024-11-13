@@ -335,7 +335,7 @@ if __name__ == '__main__':
     if not args.teleport_dense_model:
         args.pretrained_model_path = '../models/model_zoo/mobilenetv1_sparse_best.pth'
     else:
-        args.pretrained_modle_path = '../models/model_zoo/mobilenetv1_dense_best.pt'
+        args.pretrained_model_path = '../models/model_zoo/mobilenetv1_dense_best.pt'
     args.prefix_dir = "mobilenetv1_teleport_ZO_temp/"
     args.hessian_sensitivity = False
 
@@ -344,7 +344,8 @@ if __name__ == '__main__':
     BATCHS = args.batch_size
 
     # model = build_model(args, pretrained=False)
-    pretrained_sparse_model = torch.load(args.pretrained_model_path, map_location='cpu')['model'] # Named sparse but could be dense (depends on the args.teleport_dense_model)
+    pretrained_sparse_model = torch.load(args.pretrained_model_path, map_location='cpu')['model'] if not args.teleport_dense_model \
+          else torch.load(args.pretrained_model_path, map_location='cpu') # Named sparse but could be dense (depends on the args.teleport_dense_model)
     # retrieve the cfg of the pretrained model
     retrieved_cfg = []
     for module in pretrained_sparse_model.children(): 
@@ -495,9 +496,11 @@ if __name__ == '__main__':
 
 
     os.makedirs(args.prefix_dir + "images", exist_ok=True)
-    # remove previous images
-    for file in os.listdir(args.prefix_dir + "images"):
-        os.remove(os.path.join(args.prefix_dir + "images", file))
+
+    if not args.teleport_dense_model:
+        # remove previous images
+        for file in os.listdir(args.prefix_dir + "images"):
+            os.remove(os.path.join(args.prefix_dir + "images", file))
     # download the CIFAR10 dataset
     transform_test = transforms.Compose([
         transforms.ToTensor(),

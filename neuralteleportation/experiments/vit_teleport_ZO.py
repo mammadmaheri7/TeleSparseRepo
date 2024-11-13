@@ -1925,17 +1925,13 @@ if __name__ == '__main__':
         for half in [True,False]:        
             # output_path = f"{args.prefix_dir}network_split_{layer_idx}_{str(half)}.onnx"
             output_path = args.prefix_dir + f"network_split_{layer_idx}_{str(half)}.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_{layer_idx}_{str(half)}_{args.pruning_method}.onnx"
-            
             if half:
                 output_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
             else:
                 output_names = [f"/blocks.{layer_idx}/Add_3_output_0"]
-                
                 if layer_idx == (model.depth - 1):
                     output_names = ["output"]
-                    
             print("layer_idx:",layer_idx,"\t half:",str(half),"\t input_names:",input_names,"\t output_names:",output_names)
-                    
             onnx.utils.extract_model(input_path, output_path, input_names, output_names,check_model=True)
             input_names = output_names
 
@@ -1997,6 +1993,8 @@ if __name__ == '__main__':
             
             # generate compression-model and setting for all images among all layers
             list_jpeg = list(reversed(list_jpeg))
+            # set only one image in the list
+            list_jpeg = list_jpeg[:1]
 
             for jpeg_path in list_jpeg:
                 print("========== jpeg_path:",jpeg_path, " ==========")
@@ -2182,17 +2180,19 @@ if __name__ == '__main__':
                         sd = {k.replace('norm2.',''): v for k, v in sd.items() if 'norm2' in k}
                         new_model.blocks[layer_idx].norm2.load_state_dict(sd)
 
-                        # Export the optimized model to ONNX
-                        onnx_path = args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.onnx' if args.pruning_method == "CAP" else args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported_{args.pruning_method}.onnx'
-                        torch.onnx.export(LN.network, input_teleported_model, onnx_path, verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
+                        # TODO: uncomment if your plan didn't work
+                        # # Export the optimized model to ONNX
+                        # onnx_path = args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported.onnx' if args.pruning_method == "CAP" else args.prefix_dir + f'block{layer_idx}_cob_activation_norm_teleported_{args.pruning_method}.onnx'
+                        # torch.onnx.export(LN.network, input_teleported_model, onnx_path, verbose=False, export_params=True, opset_version=15, do_constant_folding=True, input_names=['input_0'], output_names=['output'])
 
-                        # check the validation of the teleportation
-                        # 1.extract onnx corrosponding to the teleported model (in original onnx)
-                        input_path = args.prefix_dir + f"network_split_{layer_idx}_False.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_{layer_idx}_False_{args.pruning_method}.onnx"
-                        output_path = args.prefix_dir + f"block{layer_idx}_cob_activation_norm.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"block{layer_idx}_cob_activation_norm_{args.pruning_method}.onnx"
-                        input_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
-                        output_names = [f"/blocks.{layer_idx}/mlp/fc2/Add_output_0"]
-                        onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
+                        # TODO: uncomment if your plan didn't work
+                        # # check the validation of the teleportation
+                        # # 1.extract onnx corrosponding to the teleported model (in original onnx)
+                        # input_path = args.prefix_dir + f"network_split_{layer_idx}_False.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_{layer_idx}_False_{args.pruning_method}.onnx"
+                        # output_path = args.prefix_dir + f"block{layer_idx}_cob_activation_norm.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"block{layer_idx}_cob_activation_norm_{args.pruning_method}.onnx"
+                        # input_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
+                        # output_names = [f"/blocks.{layer_idx}/mlp/fc2/Add_output_0"]
+                        # onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
                     
                         # write the results to the csv file
                         with open(csv_file_path, mode='a', newline='') as file:
@@ -2214,9 +2214,42 @@ if __name__ == '__main__':
                         teleport_correct += 1
                     teleport_total += 1
                     norm1 = torch.norm(new_pred - result)
-                    print("ACCURACY OF TELEPORTATION:", teleport_correct/teleport_total)
+                    print("ACCURACY OF TELEPORTATION:", teleport_correct/teleport_total, "L1-DIFFERENCE:", norm1)
                     # log on the file txt (append the accuracy of teleportation + number of corrot and total)
                     with open(args.prefix_dir + "accuracy_teleportation.txt", "a") as f:
                         f.write(f"ACCURACY OF TELEPORTATION: {teleport_correct/teleport_total} \t CORRECT: {teleport_correct} \t TOTAL: {teleport_total} \t NORM1: {norm1}\n")
                     print("==========================")
                     time.sleep(2)
+
+                    # export onnx for each split layer of the model
+                    print("====== EXPORT ONNX OF SPLITED NOT TELEPORTED LAYERS ======")
+                    for layer_idx in range(model.depth):
+                        for half in [True,False]:        
+                            # output_path = f"{args.prefix_dir}network_split_{layer_idx}_{str(half)}.onnx"
+                            output_path = args.prefix_dir + f"network_split_{layer_idx}_{str(half)}.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_{layer_idx}_{str(half)}_{args.pruning_method}.onnx"
+                            if half:
+                                output_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
+                            else:
+                                output_names = [f"/blocks.{layer_idx}/Add_3_output_0"]
+                                if layer_idx == (model.depth - 1):
+                                    output_names = ["output"]
+                            print("layer_idx:",layer_idx,"\t half:",str(half),"\t input_names:",input_names,"\t output_names:",output_names)
+                            onnx.utils.extract_model(input_path, output_path, input_names, output_names,check_model=True)
+                            input_names = output_names
+
+                    # export onnx for each split layer of the new_model (teleported model)
+                    print("====== EXPORT ONNX OF SPLITED TELEPORTED LAYERS ======")
+                    for layer_idx in range(model.depth):
+                        # Apply the teleportation to the new_model (Using for computing the next layer inputs)
+                        for half in [True,False]:
+                            output_path = args.prefix_dir + f"network_split_{layer_idx}_{str(half)}_teleported.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_{layer_idx}_{str(half)}_teleported_{args.pruning_method}.onnx"
+                            if half:
+                                output_names = [f"/blocks.{layer_idx}/Add_2_output_0"]
+                            else:
+                                output_names = [f"/blocks.{layer_idx}/Add_3_output_0"]
+                                if layer_idx == (model.depth - 1):
+                                    output_names = ["output"]
+                            print("layer_idx:",layer_idx,"\t half:",str(half),"\t input_names:",input_names,"\t output_names:",output_names)
+                            onnx.utils.extract_model(input_path, output_path, input_names, output_names,check_model=True)
+                            input_names = output_names
+                    
