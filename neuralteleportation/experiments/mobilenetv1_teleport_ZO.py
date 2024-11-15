@@ -279,6 +279,24 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
         return best_cob, best_loss.value, cor_best_range.value, cor_best_pred_error.value
 
 
+def set_onnx_size(args, BATCHS, onnx_path):
+    on = onnx.load(onnx_path)
+    for tensor in on.graph.input:
+        for dim_proto in tensor.type.tensor_type.shape.dim:
+            print("dim_proto:",dim_proto)
+            if dim_proto.HasField("dim_param"): # and dim_proto.dim_param == 'batch_size':
+                dim_proto.Clear()
+                dim_proto.dim_value = BATCHS   # fixed batch size
+    for tensor in on.graph.output:
+        for dim_proto in tensor.type.tensor_type.shape.dim:
+            if dim_proto.HasField("dim_param"):
+                dim_proto.Clear()
+                dim_proto.dim_value = BATCHS   # fixed batch size
+
+    onnx.save(on, onnx_path)
+    on = onnx.load(onnx_path)
+    on = onnx.shape_inference.infer_shapes(on)
+    onnx.save(on, onnx_path)
 
 if __name__ == '__main__':
     # set spawn start method
@@ -428,7 +446,8 @@ if __name__ == '__main__':
         output_names = ['output'], # the model's output names
         dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
                         'output': {0:'batch_size'},
-        },         
+        },
+
     )
 
     # makin the network_complete.onnx fixed batch size
@@ -692,9 +711,12 @@ if __name__ == '__main__':
 
                     onnx_path = args.prefix_dir + f"mobilenetv1_cob_activation_norm_teleported.onnx" if not args.teleport_dense_model else args.prefix_dir + f"mobilenetv1_cob_activation_norm_teleported_dense.onnx"
                     # Export the optimized model to ONNX
-                    torch.onnx.export(LN.network, data, onnx_path, verbose=False, 
+                    export_model = LN.network.eval().cpu()
+                    dummy_input = torch.randn(1, 3, 32, 32)
+
+                    torch.onnx.export(export_model, dummy_input, onnx_path, verbose=False, 
                                       export_params=True, opset_version=15, do_constant_folding=True, 
-                                      input_names=['input_0'], output_names=['output'],
+                                      input_names=['input'], output_names=['output'],
                                       dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
                                                     'output': {0:'batch_size'}},
                                       )

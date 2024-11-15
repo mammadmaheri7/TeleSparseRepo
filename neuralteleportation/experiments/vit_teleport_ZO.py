@@ -1501,7 +1501,7 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
         pred_error /= np.abs(original_pred).mean()
         pred_error = pred_error.item()
     # TODO: change the 10 with args.pred_mul (adding that to the function signature)
-    total_loss = loss + 10 * pred_error
+    total_loss = loss + 2.5 * pred_error
 
     # if random.random() < 0.0005:
     #     print(f"pred_error: {pred_error} \t range_loss: {loss}")
@@ -2097,7 +2097,7 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:  # Parallelize this loop since it's independent for each layer
-                        args.pred_mul = 10
+                        args.pred_mul = 2.5
                         args.steps = 200
                         args.cob_lr = 0.2
                         args.zoo_step_size = 0.0005
@@ -2230,6 +2230,7 @@ if __name__ == '__main__':
                     output_path = args.prefix_dir + "network_split_convs.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_convs_{args.pruning_method}.onnx"
                     input_names = ["input"]
                     output_names = ["/Add_output_0"]
+                    input_path = args.prefix_dir + "network_complete.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_complete_{args.pruning_method}.onnx"
                     onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
                     input_names = output_names
                     print("====== EXPORT ONNX OF SPLITED NOT TELEPORTED LAYERS ======")
@@ -2248,11 +2249,44 @@ if __name__ == '__main__':
                             input_names = output_names
 
                     # export onnx for each split layer of the new_model (teleported model)
-                    # Convs layer
+                    # Step1: export the onnx of teleported model
+                    onnx_path = args.prefix_dir + "network_complete_teleported.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_complete_{args.pruning_method}_teleported.onnx"
+                    # Export the model
+                    torch.onnx.export(    
+                        new_model,               # model being run
+                        x,                   # model input (or a tuple for multiple inputs)
+                        onnx_path,            # where to save the model (can be a file or file-like object)
+                        export_params=True,        # store the trained parameter weights inside the model file
+                        opset_version=15,          # the ONNX version to export the model to
+                        do_constant_folding=True,  # whether to execute constant folding for optimization
+                        input_names = ['input'],   # the model's input names
+                        output_names = ['output'], # the model's output names
+                        dynamic_axes={'input' : {0 : 'batch_size'},    # variable length axes
+                                        'output': {0:'batch_size'},
+                        },         
+                    )
+                    BATCHS = 1
+                    on = onnx.load(onnx_path)
+                    for tensor in on.graph.input:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"):
+                                dim_proto.Clear()
+                                dim_proto.dim_value = BATCHS
+                    for tensor in on.graph.output:
+                        for dim_proto in tensor.type.tensor_type.shape.dim:
+                            if dim_proto.HasField("dim_param"):
+                                dim_proto.Clear()
+                                dim_proto.dim_value = BATCHS
+                    onnx.save(on, onnx_path)
+                    on = onnx.load(onnx_path)
+                    on = onnx.shape_inference.infer_shapes(on)
+                    onnx.save(on, onnx_path)
+                    
+                    # Step2: export the onnx of the split layers of the teleported model
                     output_path = args.prefix_dir + "network_split_convs_teleported.onnx" if args.pruning_method == "CAP" else args.prefix_dir + f"network_split_convs_teleported_{args.pruning_method}.onnx"
                     input_names = ["input"]
                     output_names = ["/Add_output_0"]
-                    onnx.utils.extract_model(input_path, output_path, input_names, output_names, check_model=True)
+                    onnx.utils.extract_model(onnx_path, output_path, input_names, output_names, check_model=True)
                     input_names = output_names
                     print("====== EXPORT ONNX OF SPLITED TELEPORTED LAYERS ======")
                     for layer_idx in range(model.depth):
@@ -2266,6 +2300,6 @@ if __name__ == '__main__':
                                 if layer_idx == (model.depth - 1):
                                     output_names = ["output"]
                             print("layer_idx:",layer_idx,"\t half:",str(half),"\t input_names:",input_names,"\t output_names:",output_names)
-                            onnx.utils.extract_model(input_path, output_path, input_names, output_names,check_model=True)
+                            onnx.utils.extract_model(onnx_path, output_path, input_names, output_names,check_model=True)
                             input_names = output_names
                     
