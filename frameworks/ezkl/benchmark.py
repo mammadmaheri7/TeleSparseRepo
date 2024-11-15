@@ -1041,6 +1041,15 @@ if __name__ == "__main__":
             test_images = test_images.repeat(args.size, 1, 1, 1)
             predicted_labels = predicted_labels.repeat(args.size)
             test_labels = test_labels.repeat(args.size)
+        elif args.model == "mobilenetv1":
+            test_image = np.load(f"../../models/{arch_folder}/8.npy")
+            test_images = torch.tensor(test_image).unsqueeze(0)
+            predicted_labels = torch.tensor([1])
+            test_labels = torch.tensor([1])
+            # repeat the test_images, predicted_labels, test_labels for args.size times
+            test_images = test_images.repeat(args.size, 1, 1, 1)
+            predicted_labels = predicted_labels.repeat(args.size)
+            test_labels = test_labels.repeat(args.size)
         else:
             print("EXPILITCI DATASET DID NOT IMPLEMENTED YET")
             exit(1)
