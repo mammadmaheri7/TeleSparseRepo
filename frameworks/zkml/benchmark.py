@@ -228,6 +228,7 @@ def cnn_datasets(dataset_name=None,args=None):
             test_images.append(images.numpy())
             test_labels.append(labels.numpy())
         test_images = np.concatenate(test_images, axis=0)
+        test_images = test_images.reshape(test_images.shape[0], 32, 32, 3)
         test_labels = np.concatenate(test_labels, axis=0)
         return test_images, test_labels
 
