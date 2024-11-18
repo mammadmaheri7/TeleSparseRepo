@@ -362,7 +362,7 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
 
     return
 
-def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes="", labels=None):
+def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes="", labels=None,only_accuracy=False):
     print("Benchmarking CNN model called")
     # check model is instance of string and contain .onnx
     if isinstance(model, str) and ".onnx" in model:
@@ -434,6 +434,23 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         start_time = time.time()
         img = test_images[i:i+1].detach().cpu()
 
+        if only_accuracy:
+            # export the teleported model onnx in model_path
+            teleportation_code_address = "../../../NERUAL_TRANSPORT/neuraltelportaion_mmd/neuralteleportation/experiments/"
+            prefix_dir = "resnet20_teleport_ZO_temp_acc_only"
+            # mkdir the directory
+            os.makedirs(os.path.join(teleportation_code_address, prefix_dir), exist_ok=True)
+            # step1: provide input data for the teleportation model in directory teleportation_data
+            # store npy of the image in teleportation_code_address/prefix_dir/inputs
+            np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy())
+            # run the teleportation model
+            command = ["python", "resnet20_teleport_ZO.py", "--prefix_dir", prefix_dir, "--only_accuracy", "1"]
+            stdout, error, usage = execute_and_monitor(command)
+            print("stdout:", stdout)
+            print("error:", error)
+            # retrive the teleported onnx
+            model_path = os.path.join(teleportation_code_address, prefix_dir, "resnet20_cob_activation_norm_teleported.onnx")
+
         if not isinstance(model, str) or ".onnx" not in model:
             with torch.no_grad():
                     torch.onnx.export(model, 
@@ -475,11 +492,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         os.makedirs(os.path.dirname(data_path), exist_ok=True)
         json.dump(data, open(data_path, 'w'))
 
-        command = ["python", "gen_proof.py", "--model", model_path, "--data", data_path, "--output", output_folder, "--mode", mode]
-        # subprocess.run(command)
-        # stdout = "1234"
-        # usage = 1
-        
+        command = ["python", "gen_proof.py", "--model", model_path, "--data", data_path, "--output", output_folder, "--mode", mode, "--only_accuracy", str(int(only_accuracy))]        
         stdout, error, usage = execute_and_monitor(command)
 
         # log stdout to log file
@@ -753,6 +766,58 @@ def prepare(model, layers):
     predicted_labels = predicted_labels.tolist()
     return predicted_labels, test_images
 
+def prepare_data(model_name,num_samples=1,args=None,):
+    if model_name == 'resnet20':
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))  # Mean and std for CIFAR-100
+        ])
+        # Load the CIFAR-100 test dataset
+        test_dataset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
+        # Create the DataLoader for the test dataset
+        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
+
+        # test_images is the num_samples first images from the test dataset
+        test_images = []
+        test_labels = []
+        for i, (images, labels) in enumerate(test_loader):
+            if i>=num_samples:
+                break
+            if len(images.shape) == 3:
+                images = images.unsqueeze(0)
+            test_images.append(images)
+            test_labels.append(labels)
+        # convert list to tensor
+        test_images = torch.cat(test_images)
+        test_labels = torch.cat(test_labels)
+        return test_images, test_labels
+            
+    else:
+        print("Model not supported")
+        # error ValueError: Model not supported
+        exit(1)
+
+def inference_by_onnx(model_name=None,onnx_path=None,test_images=None,num_samples=1,args=None):
+    if model_name=='resnet20':
+        ort_session = onnxruntime.InferenceSession(onnx_path)
+        predictions = []
+        for i in range(num_samples):
+            images = test_images[i]
+            if len(images.shape) == 3:
+                images = images.unsqueeze(0)
+            ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
+            ort_outs = ort_session.run(None, ort_inputs)
+            predicted_labels = np.argmax(ort_outs[0], axis=1)
+            predictions.append(predicted_labels)
+        predictions = torch.tensor(predictions).squeeze()
+        return predictions
+
+    else:
+        print("Model not supported")
+        # error ValueError: Model not supported
+        exit(1)
+
+
 def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
     if model_name=='resnet20':
         # Define the transformations for the test dataset (Normalize CIFAR-100 according to dataset statistics)
@@ -792,82 +857,87 @@ def prepare_by_onnx(model_name=None,onnx_path=None,num_samples=1,args=None):
 
         return predictions, test_images, test_labels
 
-    elif model_name=='efficientnetb0':
-        # Transformation for imagenet dataset
-        if not hasattr(args, 'imagenet_dir'):
-            args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
-
-        args.val_testsize = num_samples + 1
-        from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-        args.mean = IMAGENET_DEFAULT_MEAN
-        args.std = IMAGENET_DEFAULT_STD
-
-        val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
-
-        predictions = []
-        test_images = []
-        test_labels = []
-
-        for i, data in enumerate(val_loader):
-            if i>=num_samples:
-                break
-            images = data[0]['data']
-            labels = data[0]['label']
-            test_images.append(images)
-            test_labels.append(labels)
-
-            # do inference on the onnx model
-            ort_session = onnxruntime.InferenceSession(onnx_path)
-            ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
-            ort_outs = ort_session.run(None, ort_inputs)
-            predicted_labels = np.argmax(ort_outs[0], axis=1)
-            predictions.append(predicted_labels)
-
-        # convert list to tensor
-        test_images = torch.cat(test_images)
-        test_labels = torch.cat(test_labels)
-        predictions = torch.tensor(predictions).squeeze()
-
-        return predictions, test_images, test_labels
-
-    elif model_name=='mobilenetv1':
-        # cifar10 dataset
-        transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-        ])
-        test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
-        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
-        predictions = []
-        test_images = []
-        test_labels = []
-
-        for i, (images, labels) in enumerate(test_loader):
-            if i>=num_samples:
-                break
-            if len(images.shape) == 3:
-                images = images.unsqueeze(0)
-            test_images.append(images)
-            test_labels.append(labels)
-
-            # do inference on the onnx model
-            ort_session = onnxruntime.InferenceSession(onnx_path)
-            ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
-            ort_outs = ort_session.run(None, ort_inputs)
-            predicted_labels = np.argmax(ort_outs[0], axis=1)
-            predictions.append(predicted_labels)
-
-        # convert list to tensor
-        test_images = torch.cat(test_images)
-        test_labels = torch.cat(test_labels)
-        predictions = torch.tensor(predictions).squeeze()
-
-        return predictions, test_images, test_labels
-
     else:
         print("Model not supported")
         # error ValueError: Model not supported
         exit(1)
+
+    # elif model_name=='efficientnetb0':
+    #     # Transformation for imagenet dataset
+    #     if not hasattr(args, 'imagenet_dir'):
+    #         args.imagenet_dir = "/rds/general/user/mm6322/home/imagenet"
+
+    #     args.val_testsize = num_samples + 1
+    #     from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+    #     args.mean = IMAGENET_DEFAULT_MEAN
+    #     args.std = IMAGENET_DEFAULT_STD
+
+    #     val_loader = get_val_imagenet_dali_loader(args, val_batchsize=1, crop_size=224, val_size=256)
+
+    #     predictions = []
+    #     test_images = []
+    #     test_labels = []
+
+    #     for i, data in enumerate(val_loader):
+    #         if i>=num_samples:
+    #             break
+    #         images = data[0]['data']
+    #         labels = data[0]['label']
+    #         test_images.append(images)
+    #         test_labels.append(labels)
+
+    #         # do inference on the onnx model
+    #         ort_session = onnxruntime.InferenceSession(onnx_path)
+    #         ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
+    #         ort_outs = ort_session.run(None, ort_inputs)
+    #         predicted_labels = np.argmax(ort_outs[0], axis=1)
+    #         predictions.append(predicted_labels)
+
+    #     # convert list to tensor
+    #     test_images = torch.cat(test_images)
+    #     test_labels = torch.cat(test_labels)
+    #     predictions = torch.tensor(predictions).squeeze()
+
+    #     return predictions, test_images, test_labels
+
+    # elif model_name=='mobilenetv1':
+    #     # cifar10 dataset
+    #     transform_test = transforms.Compose([
+    #         transforms.ToTensor(),
+    #         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    #     ])
+    #     test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+    #     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
+    #     predictions = []
+    #     test_images = []
+    #     test_labels = []
+
+    #     for i, (images, labels) in enumerate(test_loader):
+    #         if i>=num_samples:
+    #             break
+    #         if len(images.shape) == 3:
+    #             images = images.unsqueeze(0)
+    #         test_images.append(images)
+    #         test_labels.append(labels)
+
+    #         # do inference on the onnx model
+    #         ort_session = onnxruntime.InferenceSession(onnx_path)
+    #         ort_inputs = {ort_session.get_inputs()[0].name: images.numpy()}
+    #         ort_outs = ort_session.run(None, ort_inputs)
+    #         predicted_labels = np.argmax(ort_outs[0], axis=1)
+    #         predictions.append(predicted_labels)
+
+    #     # convert list to tensor
+    #     test_images = torch.cat(test_images)
+    #     test_labels = torch.cat(test_labels)
+    #     predictions = torch.tensor(predictions).squeeze()
+
+    #     return predictions, test_images, test_labels
+
+    # else:
+    #     print("Model not supported")
+    #     # error ValueError: Model not supported
+    #     exit(1)
 
 
 
@@ -957,6 +1027,9 @@ if __name__ == "__main__":
     # args.imagenet_dir
     parser.add_argument('--imagenet_dir', type=str, help='Directory of the ImageNet dataset', default="/rds/general/user/mm6322/home/imagenet")
 
+    # args.only_accuracy
+    parser.add_argument('--only_accuracy', action='store_true', help='Flag to indicate if only accuracy is calculated')
+
     args = parser.parse_args()
 
     if args.list:
@@ -1013,13 +1086,13 @@ if __name__ == "__main__":
         notes += f' | sparsity={args.sparsity}'
     if args.teleported:
         notes += " | teleported"
+        
 
     # Benchmarking on specific architecture
     if args.model == "resnet20" or args.model == "efficientnetb0" or args.model == "mobilenetv1":
         arch_folder = arch_folders[args.model].rstrip("/")
         
         # define the onnx path 
-        # onnx_path = f"../../models/resnet20/{args.model}"
         onnx_path = f"../../models/{arch_folder}/{args.model}"
         dataset_name = "cifar100" if args.model == "resnet20" else "imagenet" if args.model == "efficientnetb0" else "cifar10"
         onnx_path += f"_{dataset_name}"
@@ -1030,29 +1103,35 @@ if __name__ == "__main__":
         onnx_path += ".onnx"
         
         # do inference on the onnx model + dataset loading
-        # TODO: uncomment the following line to do inference on the onnx model, after connecting the teleportaion on each image
-        # predicted_labels, test_images, test_labels = prepare_by_onnx(args.model,onnx_path,num_samples=args.size,args=args)
-        if args.model == "resnet20":
-            test_image = np.load(f"../../models/{arch_folder}/8.npy")
-            test_images = torch.tensor(test_image).unsqueeze(0)
-            predicted_labels = torch.tensor([75])
-            test_labels = torch.tensor([75])
-            # repeat the test_images, predicted_labels, test_labels for args.size times
-            test_images = test_images.repeat(args.size, 1, 1, 1)
-            predicted_labels = predicted_labels.repeat(args.size)
-            test_labels = test_labels.repeat(args.size)
-        elif args.model == "mobilenetv1":
-            test_image = np.load(f"../../models/{arch_folder}/8.npy")
-            test_images = torch.tensor(test_image).unsqueeze(0)
-            predicted_labels = torch.tensor([1])
-            test_labels = torch.tensor([1])
-            # repeat the test_images, predicted_labels, test_labels for args.size times
-            test_images = test_images.repeat(args.size, 1, 1, 1)
-            predicted_labels = predicted_labels.repeat(args.size)
-            test_labels = test_labels.repeat(args.size)
+        if args.only_accuracy:
+            # generate data
+            test_images,test_labels = prepare_data(args.model,num_samples=args.size,args=args)
+            # this onnx is the normal onnx (not teleported) using for extracting the predictions of the model
+            onnx_path = "../../models/resnet20/resnet20_cifar100.onnx"
+            # get the onnx predictions
+            predicted_labels = inference_by_onnx(args.model,onnx_path,test_images,num_samples=args.size,args=args)
         else:
-            print("EXPILITCI DATASET DID NOT IMPLEMENTED YET")
-            exit(1)
+            if args.model == "resnet20":
+                test_image = np.load(f"../../models/{arch_folder}/8.npy")
+                test_images = torch.tensor(test_image).unsqueeze(0)
+                predicted_labels = torch.tensor([75])
+                test_labels = torch.tensor([75])
+                # repeat the test_images, predicted_labels, test_labels for args.size times
+                test_images = test_images.repeat(args.size, 1, 1, 1)
+                predicted_labels = predicted_labels.repeat(args.size)
+                test_labels = test_labels.repeat(args.size)
+            elif args.model == "mobilenetv1":
+                test_image = np.load(f"../../models/{arch_folder}/8.npy")
+                test_images = torch.tensor(test_image).unsqueeze(0)
+                predicted_labels = torch.tensor([1])
+                test_labels = torch.tensor([1])
+                # repeat the test_images, predicted_labels, test_labels for args.size times
+                test_images = test_images.repeat(args.size, 1, 1, 1)
+                predicted_labels = predicted_labels.repeat(args.size)
+                test_labels = test_labels.repeat(args.size)
+            else:
+                print("EXPILITCI DATASET DID NOT IMPLEMENTED YET")
+                exit(1)
 
         # calculate the accuracy of original onnx model        
         accuracy_orignal_onnx = (predicted_labels == test_labels).sum().item() / len(test_labels)
@@ -1060,7 +1139,7 @@ if __name__ == "__main__":
 
         # do benchmarking
         benchmark_cnn(test_images, predicted_labels, onnx_path, args.model, 
-                    mode=mode, save=args.save, notes=notes, labels=test_labels)
+                    mode=mode, save=args.save, notes=notes, labels=test_labels,only_accuracy=args.only_accuracy)
     elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
 

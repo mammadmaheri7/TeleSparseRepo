@@ -7,7 +7,7 @@ import numpy as np
 import argparse
 import time
 
-async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
+async def gen_proof(output_folder, data_path , model_path, mode = "resources", only_accuracy=False):
     compiled_model_path = os.path.join(output_folder, 'network.compiled')
     settings_path = os.path.join(output_folder, 'settings.json') 
     witness_path = os.path.join(output_folder, 'witness.json')
@@ -107,6 +107,9 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources"):
 
     pred = np.argmax([prediction_array])
 
+    if only_accuracy:
+        return pred
+
     print("Mocking")
     res = ezkl.mock(witness_path, compiled_model_path)
     assert res == True
@@ -146,10 +149,12 @@ if __name__ == "__main__":
     parser.add_argument('--data', type=str, required=True, help='Data file path')
     parser.add_argument('--model', type=str, required=True, help='Model file path')
     parser.add_argument('--mode', type=str, required=False, help='Model file path')
+    # boolean only_accuracy default False
+    parser.add_argument('--only_accuracy', type=bool, required=False, default=False, help='Only return prediction')
 
     args = parser.parse_args()
 
     # pred = gen_proof(args.output, args.data, args.model, args.mode)
-    pred = asyncio.run(gen_proof(args.output, args.data, args.model, args.mode))
+    pred = asyncio.run(gen_proof(args.output, args.data, args.model, args.mode, args.only_accuracy))
     
     print(f"Prediction: {pred}")
