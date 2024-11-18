@@ -437,7 +437,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         if only_accuracy:
             # export the teleported model onnx in model_path
             teleportation_code_address = "../../../NERUAL_TRANSPORT/neuraltelportaion_mmd/neuralteleportation/experiments/"
-            prefix_dir = "resnet20_teleport_ZO_temp_acc_only"
+            prefix_dir = "resnet20_teleport_ZO_temp_acc_only/"
             # mkdir the directory
             os.makedirs(os.path.join(teleportation_code_address, prefix_dir), exist_ok=True)
             os.makedirs(os.path.join(teleportation_code_address, prefix_dir, "images"), exist_ok=True)
@@ -446,7 +446,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             # remove all previous file in the directory
             for file in os.listdir(os.path.join(teleportation_code_address, prefix_dir, "images")):
                 os.remove(os.path.join(teleportation_code_address, prefix_dir, "images", file))
-            np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy())
+            np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy().squeeze(0))
             # run the teleportation model
             command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1"]
             stdout, error, usage = execute_and_monitor(command,cwd=teleportation_code_address)
