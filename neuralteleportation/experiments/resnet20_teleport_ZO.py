@@ -618,7 +618,7 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     args.pred_mul = 0
-                    args.steps = 100
+                    args.steps = 1
                     args.cob_lr = 0.05
                     args.zoo_step_size = 0.0005
 
