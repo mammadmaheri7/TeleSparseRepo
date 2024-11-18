@@ -440,12 +440,11 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             prefix_dir = "resnet20_teleport_ZO_temp_acc_only/"
             # mkdir the directory
             os.makedirs(os.path.join(teleportation_code_address, prefix_dir), exist_ok=True)
+            # remove images directoy if exist
+            os.removedirs(os.path.join(teleportation_code_address, prefix_dir, "images"))
             os.makedirs(os.path.join(teleportation_code_address, prefix_dir, "images"), exist_ok=True)
             # step1: provide input data for the teleportation model in directory teleportation_data
             # store npy of the image in teleportation_code_address/prefix_dir/inputs
-            # remove all previous file in the directory
-            for file in os.listdir(os.path.join(teleportation_code_address, prefix_dir, "images")):
-                os.remove(os.path.join(teleportation_code_address, prefix_dir, "images", file))
             np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy().squeeze(0))
             # run the teleportation model
             command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1"]
