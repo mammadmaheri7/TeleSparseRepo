@@ -441,7 +441,8 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             # mkdir the directory
             os.makedirs(os.path.join(teleportation_code_address, prefix_dir), exist_ok=True)
             # remove images directoy if exist
-            os.removedirs(os.path.join(teleportation_code_address, prefix_dir, "images"))
+            if os.path.exists(os.path.join(teleportation_code_address, prefix_dir, "images")):
+                os.removedirs(os.path.join(teleportation_code_address, prefix_dir, "images"))
             os.makedirs(os.path.join(teleportation_code_address, prefix_dir, "images"), exist_ok=True)
             # step1: provide input data for the teleportation model in directory teleportation_data
             # store npy of the image in teleportation_code_address/prefix_dir/inputs
