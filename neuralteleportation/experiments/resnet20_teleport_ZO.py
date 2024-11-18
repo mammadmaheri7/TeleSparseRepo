@@ -521,6 +521,7 @@ if __name__ == '__main__':
                 # img = Image.open(args.prefix_dir + f"images/{jpeg_path}")
                 img = np.load(args.prefix_dir + f"images/{jpeg_path}")
                 img_name = os.path.splitext(jpeg_path)[0]
+                print("image shape:",img.shape)
                 assert img.shape == (3,32,32)
                 data = torch.tensor(img).unsqueeze(0).float()
 
