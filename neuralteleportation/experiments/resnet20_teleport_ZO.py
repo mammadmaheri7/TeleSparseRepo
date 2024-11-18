@@ -310,6 +310,8 @@ if __name__ == '__main__':
     # define one arguemnt named teleport_dense_model (bool with default value False)
     parser = argparse.ArgumentParser(description='Teleportation of a ResNet20 model trained on CIFAR-100')
     parser.add_argument('--teleport_dense_model', type=bool, default=False, help='Teleport the dense model')
+    parser.add_argument('--prefix_dir', type=str, default='resnet20_teleport_ZO_temp/', help='Prefix directory for the experiment')
+    parser.add_argument('--only_accuracy', type=bool, default=False, help='Only compute the accuracy of the model')
     args = parser.parse_args()
 
     # set spawn start method
@@ -322,7 +324,7 @@ if __name__ == '__main__':
 
     # args = argparse.Namespace()
     args.batch_size = 1
-    args.prefix_dir = "resnet20_teleport_ZO_temp/"
+    # args.prefix_dir = "resnet20_teleport_ZO_temp/"
     # args.pretrained_model_path = '../models/model_zoo/rd1_resnet20_sparse50.pth.tar'
 
     if not args.teleport_dense_model:
@@ -442,46 +444,52 @@ if __name__ == '__main__':
     else:
         list_of_no_teleportation = []
 
-    # save 10 random images of CIFAR10 in the prefix_dir/images
-    if not args.teleport_dense_model:
-        os.makedirs(args.prefix_dir + "images", exist_ok=True)
-        # remove previous images
-        for file in os.listdir(args.prefix_dir + "images"):
-            os.remove(os.path.join(args.prefix_dir + "images", file))
+    if not args.only_accuracy:
+        # save 10 random images of CIFAR10 in the prefix_dir/images
+        if not args.teleport_dense_model:
+            os.makedirs(args.prefix_dir + "images", exist_ok=True)
+            # remove previous images
+            for file in os.listdir(args.prefix_dir + "images"):
+                os.remove(os.path.join(args.prefix_dir + "images", file))
 
-    # download the CIFAR100 dataset
-    transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))  # Mean and std for CIFAR-100
-    ])
-    testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
-    testloader = DataLoader(testset, batch_size=1, shuffle=True)
+        # download the CIFAR100 dataset
+        transform_test = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))  # Mean and std for CIFAR-100
+        ])
+        testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
+        testloader = DataLoader(testset, batch_size=1, shuffle=True)
 
-    if not args.teleport_dense_model:
-        # save 10 images
-        for i, data in enumerate(testloader):
-            if i == 10:
-                break
-            img, target = data
-            img = img.squeeze(0)
-            assert img.shape == (3,32,32)
-            img = img.numpy()
-            np.save(args.prefix_dir + f"images/{i}.npy", img)
+        if not args.teleport_dense_model:
+            # save 10 images
+            for i, data in enumerate(testloader):
+                if i == 10:
+                    break
+                img, target = data
+                img = img.squeeze(0)
+                assert img.shape == (3,32,32)
+                img = img.numpy()
+                np.save(args.prefix_dir + f"images/{i}.npy", img)
 
-    list_jpeg = os.listdir(args.prefix_dir + "images")
-    list_jpeg = [x for x in list_jpeg if x.endswith(".npy")]
+        list_jpeg = os.listdir(args.prefix_dir + "images")
+        list_jpeg = [x for x in list_jpeg if x.endswith(".npy")]
 
-    # Evaluate the model on the CIFAR-100 dataset
-    corroct , total = 0, 0
-    with torch.no_grad():
-        for data in testloader:
-            images, labels = data
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            corroct += (predicted == labels).sum().item()
-    print('Accuracy of the network on the 10000 test images: %.2f %%' % (100 * corroct / total))
-    print("----------------- ================== -----------------")
+        # Evaluate the model on the CIFAR-100 dataset
+        corroct , total = 0, 0
+        with torch.no_grad():
+            for data in testloader:
+                images, labels = data
+                outputs = model(images)
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                corroct += (predicted == labels).sum().item()
+        print('Accuracy of the network on the 10000 test images: %.2f %%' % (100 * corroct / total))
+        print("----------------- ================== -----------------")
+    else:
+        list_jpeg = os.listdir(args.prefix_dir + "images")
+        list_jpeg = [x for x in list_jpeg if x.endswith(".npy")]
+        # assert only one image is present
+        assert len(list_jpeg) == 1
 
     # computing accuracy of the teleportation
     teleport_correct = 0
