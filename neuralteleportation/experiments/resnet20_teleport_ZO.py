@@ -460,7 +460,7 @@ if __name__ == '__main__':
         testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
         testloader = DataLoader(testset, batch_size=1, shuffle=True)
 
-        if not args.teleport_dense_model:
+        if not args.teleport_dense_model and not args.only_accuracy:
             # save 10 images
             for i, data in enumerate(testloader):
                 if i == 10:
