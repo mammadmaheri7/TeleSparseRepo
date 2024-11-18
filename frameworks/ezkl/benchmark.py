@@ -445,7 +445,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             # store npy of the image in teleportation_code_address/prefix_dir/inputs
             np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy())
             # run the teleportation model
-            command = ["python", "resnet20_teleport_ZO.py", "--prefix_dir", prefix_dir, "--only_accuracy", "1"]
+            command = ["python", f'{teleportation_code_address}+resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1"]
             stdout, error, usage = execute_and_monitor(command)
             print("stdout:", stdout)
             print("error:", error)
