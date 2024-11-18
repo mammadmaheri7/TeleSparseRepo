@@ -249,14 +249,14 @@ def monitor_memory(pid, freq = 0.001):
     #print(f"Maximum memory used: {max_memory} MB")
     return max_memory
 
-def execute_and_monitor(command, show = False):
+def execute_and_monitor(command, show = False, cwd = None):
     start_time = time.time()
     if command[0] == 'python':
         command[0] = 'python3'  # Update to python3 if needed
         command.insert(1, '-u')
 
     print(f"Running command: {' '.join(command)}")
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd if cwd else None)
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(monitor_memory, process.pid)
         stdout, stderr = process.communicate()
@@ -449,7 +449,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy())
             # run the teleportation model
             command = ["python", f'{teleportation_code_address}resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1"]
-            stdout, error, usage = execute_and_monitor(command)
+            stdout, error, usage = execute_and_monitor(command,cwd=teleportation_code_address)
             print("stdout:", stdout)
             print("error:", error)
             # retrive the teleported onnx
