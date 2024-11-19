@@ -2105,9 +2105,6 @@ if __name__ == '__main__':
                 data_dict = dict(input_data = [((data).detach().numpy()).reshape([-1]).tolist()])
                 json.dump( data_dict, open(data_path, 'w' ))
 
-                # remove this line if the teleportation is not working
-                list_of_no_teleportation = []
-
                 with torch.no_grad():
                     for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:  # Parallelize this loop since it's independent for each layer
                         args.pred_mul = 1.0
