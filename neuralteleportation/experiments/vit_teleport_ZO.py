@@ -1739,16 +1739,20 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
 if __name__ == '__main__':
     # set spawn start method
     mp.set_start_method('spawn', force=True)
+    parser = argparse.ArgumentParser(description='Teleportation of a Visiont Transformer model trained on ImageNet')
+    parser.add_argument('--teleport_dense_model', type=bool, default=False, help='Teleport the dense model')
     args = get_default_args()
+    args.teleport_dense_model = parser.parse_args().teleport_dense_model
+
     print(args.__dict__)
 
     default_model = "vit_tiny"
     default_data_path = "/rds/general/user/mm6322/home/imagenet"
-    default_resume = "./sparse-cap-acc-tmp/deit_tiny_patch16_224_sparsity=0.50_best.pth"
+    default_resume = "./sparse-cap-acc-tmp/deit_tiny_patch16_224_sparsity=0.50_best.pth" if not args.teleport_dense_model else "./sparse-cap-acc-tmp/deit_tiny_patch16_224-a1311bcf.pth"
     # default_resume = "/rds/general/user/mm6322/home/verifiable_NN_ezkl/examples/notebooks/CAP_pruned_models/Checkpoints/deit_tiny_patch16_224_sparsity=0.50_best.pth"
     default_sparsity = 0.5
     default_batch_size = 1
-    default_pruning_method = "CAP"
+    default_pruning_method = "CAP" if not args.teleport_dense_model else "DENSE"
     default_prefix_dir = "sparse-cap-acc-tmp/"
     default_input_param_scale = 7
     default_log_rows = 20
@@ -2107,7 +2111,7 @@ if __name__ == '__main__':
                 with torch.no_grad():
                     for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:  # Parallelize this loop since it's independent for each layer
                         args.pred_mul = 1.0
-                        args.steps = 100 # TODO: return to 200
+                        args.steps = 200
                         args.cob_lr = 0.2
                         args.zoo_step_size = 0.0005
 
