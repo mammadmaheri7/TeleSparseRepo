@@ -333,11 +333,6 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
 
     print ("Total time:", time.time() - benchmark_start_time)
 
-    if args.only_accuracy:
-        # giving the accuracy loss
-        print(f"Accuracy Loss: {loss/len(test_images) * 100}%")
-        exit(0)
-
     layers = model_name.split("_")
     arch = "Input" + (len(layers)-1) * "-Dense"
     new_row = {
@@ -561,6 +556,13 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         # compute proof size
         proof_path = os.path.join(output_folder, 'proof.json')
         proof_size.append(os.path.getsize(proof_path) / 1024)  # in KB
+
+    
+    if only_accuracy:
+        total_num_images = len(test_images)
+        print("Acc@1 (%)", (total_num_images - loss_with_true_label) / total_num_images * 100)
+        print("ACC with onnx model", (total_num_images - loss) / total_num_images * 100)
+        return
 
     print ("Total time:", time.time() - benchmark_start_time)
 
