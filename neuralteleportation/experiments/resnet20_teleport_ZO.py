@@ -312,6 +312,8 @@ if __name__ == '__main__':
     parser.add_argument('--teleport_dense_model', type=bool, default=False, help='Teleport the dense model')
     parser.add_argument('--prefix_dir', type=str, default='resnet20_teleport_ZO_temp/', help='Prefix directory for the experiment')
     parser.add_argument('--only_accuracy', type=bool, default=False, help='Only compute the accuracy of the model')
+    # define not forced arguments steps
+    parser.add_argument('--steps', type=int, default=None, help='Number of steps for the optimization')
     args = parser.parse_args()
 
     # set spawn start method
@@ -618,7 +620,7 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     args.pred_mul = 0
-                    args.steps = 1
+                    args.steps = 200 if isinstance(args.steps, type(None)) else args.steps
                     args.cob_lr = 0.05
                     args.zoo_step_size = 0.0005
 
