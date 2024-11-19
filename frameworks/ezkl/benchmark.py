@@ -333,6 +333,11 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
 
     print ("Total time:", time.time() - benchmark_start_time)
 
+    if args.only_accuracy:
+        # giving the accuracy loss
+        print(f"Accuracy Loss: {loss/len(test_images) * 100}%")
+        exit(0)
+
     layers = model_name.split("_")
     arch = "Input" + (len(layers)-1) * "-Dense"
     new_row = {
