@@ -1448,7 +1448,7 @@ def activation_hook(name, activation_stats, activations_output=None, layer_idx=N
     return hook
 
 # The function that calculates loss based on COB and runs inference
-def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None, activation_orig=None, grad_orig=None, hessian_sensitivity=False):    
+def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_loss=None, tm=None, activation_orig=None, grad_orig=None, hessian_sensitivity=False, multiplier=None):    
     # Set up model with the new COB
     teleported_model = tm
     # Apply the COB
@@ -1501,7 +1501,10 @@ def f_ack(cob, input_data=None, original_pred=None, layer_idx=None, original_los
         pred_error /= np.abs(original_pred).mean()
         pred_error = pred_error.item()
     # TODO: change the 10 with args.pred_mul (adding that to the function signature)
-    total_loss = loss + 2.5 * pred_error
+    if isinstance(multiplier, float):
+        total_loss = loss + multiplier * pred_error
+    else:
+        total_loss = loss + 2.0 * pred_error
 
     # if random.random() < 0.0005:
     #     print(f"pred_error: {pred_error} \t range_loss: {loss}")
@@ -1654,7 +1657,7 @@ def cge_batched(func, params_dict, mask_dict, step_size, pool, base=None, num_pr
 
 import time
 # Training loop using the persistent pool
-def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig = None, grad_orig = None):
+def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig = None, grad_orig = None, multiplier = None):
     initial_cob_idx = torch.ones(960)  # Initial guess for COB
 
     # Prepare the function for constrained gradient estimation
@@ -1667,7 +1670,8 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
         tm=LN,
         activation_orig = activation_orig,
         grad_orig = grad_orig,
-        hessian_sensitivity = args.hessian_sensitivity
+        hessian_sensitivity = args.hessian_sensitivity,
+        multiplier = multiplier
     )
 
     eval_ackley = functools.partial(
@@ -1677,7 +1681,8 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
         layer_idx=layer_idx,
         original_loss=original_loss_idx,
         tm=LN,
-        hessian_sensitivity = args.hessian_sensitivity
+        hessian_sensitivity = args.hessian_sensitivity,
+        multiplier = multiplier
     )
 
     best_cob = None
@@ -2006,6 +2011,7 @@ if __name__ == '__main__':
                 # compute the output_orig and grad_orig dictionaries
                 activations_orig = None
                 gradients_orig = None
+                range_list_all = None
 
                 if args.hessian_sensitivity:
                     # Define a function to create a forward hook that captures the layer index
@@ -2095,10 +2101,13 @@ if __name__ == '__main__':
                 data_dict = dict(input_data = [((data).detach().numpy()).reshape([-1]).tolist()])
                 json.dump( data_dict, open(data_path, 'w' ))
 
+                # remove this line if the teleportation is not working
+                list_of_no_teleportation = []
+
                 with torch.no_grad():
                     for layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]:  # Parallelize this loop since it's independent for each layer
-                        args.pred_mul = 2.5
-                        args.steps = 200
+                        args.pred_mul = 1.0
+                        args.steps = 100 # TODO: return to 200
                         args.cob_lr = 0.2
                         args.zoo_step_size = 0.0005
 
@@ -2166,9 +2175,15 @@ if __name__ == '__main__':
                         else:
                             act_idx = activations_orig[layer_idx] if activations_orig is not None else None
                             grad_idx = gradients_orig[layer_idx] if gradients_orig is not None else None
+                            # set multiplier for the prediction error (grows as the range of that layer is bigger)
+                            base = args.pred_mul
+                            # average of values in the range_list_all
+                            avg_activation = sum(range_list_all.values())/len(range_list_all)
+                            multipliers_array = {i: base*(avg_activation/range_list_all[i]) for i in range(model.depth)}
+                            print("multipliers_array:",multipliers_array)
                             # best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig=act_idx, grad_orig=grad_idx)
                             # change the input of the train_cob to input_orig in order to run the all blocks teleportation in parallel
-                            best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, input_org, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig=act_idx, grad_orig=grad_idx)
+                            best_cob,best_loss,cor_best_range,cor_best_pred_error = train_cob(input_teleported_model, input_org, original_pred, layer_idx, original_loss_idx, LN, args, activation_orig=act_idx, grad_orig=grad_idx,multiplier = multipliers_array[layer_idx])
                             print("BEST LOSS:",best_loss)
                             LN = LN.teleport(best_cob, reset_teleportation=True)
                             # save the .pth of the teleported model
