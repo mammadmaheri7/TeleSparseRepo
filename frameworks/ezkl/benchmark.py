@@ -373,6 +373,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
     data_path = os.path.join(output_folder,model_name, 'input.json')
     loss = 0
     loss_with_true_label = 0
+    loss_onnx_with_true_label = 0
     mem_usage = []
     time_cost = []
     proof_size = []
@@ -550,6 +551,10 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         if pred != labels[i]:
             loss_with_true_label += 1
             print ("Loss happens on index", i, "predicted_class", pred, "\t true_label", labels[i])
+
+        if predictions[i] != labels[i]:
+            loss_onnx_with_true_label += 1
+            print ("Loss happens on index", i, "onnx_predicted_class", predictions[i], "\t true_label", labels[i])
         
         mem_usage.append(usage)
         time_cost.append(float(proof_took))
@@ -557,11 +562,18 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         proof_path = os.path.join(output_folder, 'proof.json')
         proof_size.append(os.path.getsize(proof_path) / 1024)  # in KB
 
+        # print current accuracies
+        print("==== Current Accuracies ====")
+        print("Acc@1 (%)", (len(test_images) - loss_with_true_label) / len(test_images) * 100)
+        print("ACC with onnx model", (len(test_images) - loss) / len(test_images) * 100)
+        print("Acc onnx with true label", (len(test_images) - loss_onnx_with_true_label) / len(test_images) * 100)
+
     
     if only_accuracy:
         total_num_images = len(test_images)
         print("Acc@1 (%)", (total_num_images - loss_with_true_label) / total_num_images * 100)
         print("ACC with onnx model", (total_num_images - loss) / total_num_images * 100)
+        print("Acc onnx with true label", (total_num_images - loss_onnx_with_true_label) / total_num_images * 100)
         return
 
     print ("Total time:", time.time() - benchmark_start_time)
