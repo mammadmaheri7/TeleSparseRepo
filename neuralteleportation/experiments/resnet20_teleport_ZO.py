@@ -231,7 +231,7 @@ def train_cob(input_teleported_model,input_orig_model, original_pred, layer_idx,
 
     best_cob = None
     # best_loss = float('inf')
-    num_process = 2
+    num_process = 4
 
     with mp.Manager() as manager:
         best_loss = manager.Value('d', float('inf'))  # Shared float variable for the best loss
