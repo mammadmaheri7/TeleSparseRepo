@@ -567,6 +567,7 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         print("Acc@1 (%)", (len(test_images) - loss_with_true_label) / len(test_images) * 100)
         print("ACC with onnx model", (len(test_images) - loss) / len(test_images) * 100)
         print("Acc onnx with true label", (len(test_images) - loss_onnx_with_true_label) / len(test_images) * 100)
+        print("=============================\n\n")
 
     
     if only_accuracy:
