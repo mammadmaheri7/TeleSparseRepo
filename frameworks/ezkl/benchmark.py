@@ -432,6 +432,8 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
 
     for i in range(len(test_images)):
         print ("Process for image", i)
+        # flush stout
+        sys.stdout.flush()
         start_time = time.time()
         img = test_images[i:i+1].detach().cpu()
 
