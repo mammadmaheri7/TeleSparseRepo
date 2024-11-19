@@ -620,7 +620,7 @@ if __name__ == '__main__':
 
                 with torch.no_grad():
                     args.pred_mul = 0
-                    args.steps = 200 if isinstance(args.steps, type(None)) else args.steps
+                    args.steps = 200 if isinstance(args.steps, type(None)) else int(args.steps)
                     args.cob_lr = 0.05
                     args.zoo_step_size = 0.0005
 
