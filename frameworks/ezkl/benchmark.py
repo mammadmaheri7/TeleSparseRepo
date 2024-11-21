@@ -16,6 +16,7 @@ import argparse
 
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import datasets, transforms
+import shutil
 
 params = {"784_56_10": 44543,
           "196_25_10": 5185,
@@ -438,22 +439,22 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
         img = test_images[i:i+1].detach().cpu()
 
         if only_accuracy:
-            # export the teleported model onnx in model_path
-            teleportation_code_address = "../../../NERUAL_TRANSPORT/neuraltelportaion_mmd/neuralteleportation/experiments/"
-            prefix_dir = "resnet20_teleport_ZO_temp_acc_only/"
-            # mkdir the directory
-            os.makedirs(os.path.join(teleportation_code_address, prefix_dir), exist_ok=True)
-            # remove images directoy if exist
-            if os.path.exists(os.path.join(teleportation_code_address, prefix_dir, "images")):
-                # remove directory even the directory is not empty
-                import shutil
-                shutil.rmtree(os.path.join(teleportation_code_address, prefix_dir, "images"))
-            os.makedirs(os.path.join(teleportation_code_address, prefix_dir, "images"), exist_ok=True)
-            # step1: provide input data for the teleportation model in directory teleportation_data
-            # store npy of the image in teleportation_code_address/prefix_dir/inputs
-            np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy().squeeze(0))
-            # run the teleportation model
+            
             if only_acc_teleported:
+                # export the teleported model onnx in model_path
+                teleportation_code_address = "../../../NERUAL_TRANSPORT/neuraltelportaion_mmd/neuralteleportation/experiments/"
+                prefix_dir = "resnet20_teleport_ZO_temp_acc_only/"
+                os.makedirs(os.path.join(teleportation_code_address, prefix_dir), exist_ok=True)
+                # remove images directoy if exist
+                if os.path.exists(os.path.join(teleportation_code_address, prefix_dir, "images")):
+                    shutil.rmtree(os.path.join(teleportation_code_address, prefix_dir, "images"))
+                os.makedirs(os.path.join(teleportation_code_address, prefix_dir, "images"), exist_ok=True)
+
+                # step1: provide input data for the teleportation model in directory teleportation_data
+                # store npy of the image in teleportation_code_address/prefix_dir/inputs
+                np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy().squeeze(0))
+                
+                # step2: run the teleportation model
                 # computing acc on sparsity 50 - teleported model
                 command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "50"]
                 stdout, error, usage = execute_and_monitor(command,cwd=teleportation_code_address)
@@ -1143,7 +1144,10 @@ if __name__ == "__main__":
             # generate data
             test_images,test_labels = prepare_data(args.model,num_samples=args.size,args=args)
             # this onnx is the normal onnx (not teleported) using for extracting the predictions of the model
-            onnx_path = "../../models/resnet20/resnet20_cifar100.onnx"
+            if args.sparsity == 50:
+                onnx_path = "../../models/resnet20/resnet20_cifar100_sparse50.onnx"
+            else:
+                onnx_path = "../../models/resnet20/resnet20_cifar100.onnx"
             # get the onnx predictions
             predicted_labels = inference_by_onnx(args.model,onnx_path,test_images,num_samples=args.size,args=args)
         else:
