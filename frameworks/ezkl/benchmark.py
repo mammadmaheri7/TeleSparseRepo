@@ -456,15 +456,16 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             if only_acc_teleported:
                 # computing acc on sparsity 50 - teleported model
                 command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "50"]
+                stdout, error, usage = execute_and_monitor(command,cwd=teleportation_code_address)
+                print("stdout:", stdout)
+                print("error:", error)
+                # retrive the teleported onnx
+                model_path = os.path.join(teleportation_code_address, prefix_dir, "resnet20_cob_activation_norm_teleported.onnx")
             else:
                 # computing acc on sparsity 0 - NOT teleported model
                 print("NO TELEPORTATION CALLED FOR ACCURACY CALCULATION")
-                command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "1" , "--teleport_dense_model"]
-            stdout, error, usage = execute_and_monitor(command,cwd=teleportation_code_address)
-            print("stdout:", stdout)
-            print("error:", error)
-            # retrive the teleported onnx
-            model_path = os.path.join(teleportation_code_address, prefix_dir, "resnet20_cob_activation_norm_teleported.onnx")
+                model_path = model
+            
 
         if not isinstance(model, str) or ".onnx" not in model:
             with torch.no_grad():
