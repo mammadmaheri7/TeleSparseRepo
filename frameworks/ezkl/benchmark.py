@@ -443,7 +443,8 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             if only_acc_teleported:
                 # export the teleported model onnx in model_path
                 teleportation_code_address = "../../../NERUAL_TRANSPORT/neuraltelportaion_mmd/neuralteleportation/experiments/"
-                prefix_dir = "resnet20_teleport_ZO_temp_acc_only/"
+                # adding whether teleported to prefix_dir
+                prefix_dir = f"resnet20_teleport_ZO_temp_acc_only_{"teleported" if only_acc_teleported else "not_teleported"}/"
                 os.makedirs(os.path.join(teleportation_code_address, prefix_dir), exist_ok=True)
                 # remove images directoy if exist
                 if os.path.exists(os.path.join(teleportation_code_address, prefix_dir, "images")):
