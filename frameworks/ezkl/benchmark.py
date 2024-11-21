@@ -454,10 +454,12 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy().squeeze(0))
             # run the teleportation model
             if only_acc_teleported:
+                # computing acc on sparsity 50 - teleported model
                 command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "50"]
             else:
+                # computing acc on sparsity 0 - NOT teleported model
                 print("NO TELEPORTATION CALLED FOR ACCURACY CALCULATION")
-                command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "0"]
+                command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "1" , "--teleport_dense_model"]
             stdout, error, usage = execute_and_monitor(command,cwd=teleportation_code_address)
             print("stdout:", stdout)
             print("error:", error)
