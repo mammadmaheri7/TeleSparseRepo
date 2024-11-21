@@ -362,7 +362,7 @@ def benchmark_dnn(test_images, predictions, model, model_name, mode = "resources
 
     return
 
-def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes="", labels=None,only_accuracy=False):
+def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources", output_folder='./tmp/', save=False, notes="", labels=None,only_accuracy=False,only_acc_teleported=True):
     print("Benchmarking CNN model called")
     # check model is instance of string and contain .onnx
     if isinstance(model, str) and ".onnx" in model:
@@ -453,7 +453,11 @@ def benchmark_cnn(test_images, predictions, model, model_name, mode = "resources
             # store npy of the image in teleportation_code_address/prefix_dir/inputs
             np.save(os.path.join(teleportation_code_address, prefix_dir, "images", f"input_{i}.npy"), img.cpu().detach().numpy().squeeze(0))
             # run the teleportation model
-            command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "50"]
+            if only_acc_teleported:
+                command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "50"]
+            else:
+                print("NO TELEPORTATION CALLED FOR ACCURACY CALCULATION")
+                command = ["python", f'resnet20_teleport_ZO.py', "--prefix_dir", prefix_dir, "--only_accuracy", "1", "--steps", "0"]
             stdout, error, usage = execute_and_monitor(command,cwd=teleportation_code_address)
             print("stdout:", stdout)
             print("error:", error)
@@ -1168,7 +1172,7 @@ if __name__ == "__main__":
 
         # do benchmarking
         benchmark_cnn(test_images, predicted_labels, onnx_path, args.model, 
-                    mode=mode, save=args.save, notes=notes, labels=test_labels,only_accuracy=args.only_accuracy)
+                    mode=mode, save=args.save, notes=notes, labels=test_labels,only_accuracy=args.only_accuracy,only_acc_teleported=args.teleported)
     elif dnn:
         arch_folder = "input" + (len(layers)-1) * "-dense" + "/"
 
