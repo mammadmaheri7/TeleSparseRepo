@@ -448,7 +448,7 @@ if __name__ == '__main__':
 
     if not args.only_accuracy:
         # save 10 random images of CIFAR10 in the prefix_dir/images
-        if not args.teleport_dense_model:
+        if not args.teleport_dense_model and not ("75" in args.prefix_dir or "25" in args.prefix_dir):
             os.makedirs(args.prefix_dir + "images", exist_ok=True)
             # remove previous images
             for file in os.listdir(args.prefix_dir + "images"):
@@ -462,7 +462,10 @@ if __name__ == '__main__':
         testset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
         testloader = DataLoader(testset, batch_size=1, shuffle=True)
 
-        if not args.teleport_dense_model and not args.only_accuracy:
+        # check if the folder images exists
+        if os.path.exists(args.prefix_dir + "images"):
+            print("Images already exist in the folder")
+        elif not args.teleport_dense_model and not args.only_accuracy:
             # save 10 images
             for i, data in enumerate(testloader):
                 if i == 10:
