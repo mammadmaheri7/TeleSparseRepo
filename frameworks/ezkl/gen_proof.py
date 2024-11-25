@@ -155,6 +155,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # pred = gen_proof(args.output, args.data, args.model, args.mode)
-    pred = asyncio.run(gen_proof(args.output, args.data, args.model, args.mode, args.only_accuracy))
+    pred = asyncio.run(gen_proof(args.output, args.data, args.model, args.mode, only_accuracy=args.only_accuracy))
     
     print(f"Prediction: {pred}")
