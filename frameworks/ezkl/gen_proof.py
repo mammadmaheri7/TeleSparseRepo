@@ -80,6 +80,7 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources", o
     assert res == True
 
     # now generate the witness file
+    print("Generating witness")
     try:
         res = await ezkl.gen_witness(data_path, compiled_model_path, witness_path)
     except Exception as e:
@@ -108,6 +109,7 @@ async def gen_proof(output_folder, data_path , model_path, mode = "resources", o
     pred = np.argmax([prediction_array])
 
     if only_accuracy:
+        print("Returning prediction only")
         return pred
 
     print("Mocking")
