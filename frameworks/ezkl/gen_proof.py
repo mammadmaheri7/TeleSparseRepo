@@ -157,6 +157,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # pred = gen_proof(args.output, args.data, args.model, args.mode)
+    # check wether the only_accuracy is set to True or False
+    print(f"Only Accuracy: {args.only_accuracy} - is it True? {args.only_accuracy == True}")
     pred = asyncio.run(gen_proof(args.output, args.data, args.model, args.mode, only_accuracy=args.only_accuracy))
     
     print(f"Prediction: {pred}")
