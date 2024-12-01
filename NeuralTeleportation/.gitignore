@@ -1,0 +1,170 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Lightning /camus
+test_tube_exp/
+tests/tests_tt_dir/
+tests/save_dir
+default/
+test_tube_logs/
+test_tube_data/
+datasets/
+model_weights/
+tests/save_dir
+tests/tests_tt_dir/
+processed/
+raw/
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+
+# IDEs
+.idea
+.idea/
+build/
+dist/
+neuralteleportation.egg-info/
+**/__pycache__
+
+# Datasets
+dataset/*
+!dataset/*.sh
+!dataset/*.py
+
+#vscode
+.vscode/
+
+# output
+neuralteleportation/experiments/micro_teleportation/images/**
+
+# Local config
+*.comet.config
+
+*.pt
+
+mmd/*
+*.pth
+*.onnx
+*.pkl
+teleport_pip_env
+*.json
+*.npy
+*.compiled
+*.csv
+*.DS_Store
+neuralteleportation/experiments/.DS_Store
+.DS_Store
+
+neuralteleportation/experiments/model_weights_cob_activation_norm_teleported.onnx
+neuralteleportation/experiments/model_weights_cob_activation_norm.onnx
+neuralteleportation/experiments/input_data.npy
+neuralteleportation/experiments/sparse-cap-acc-tmp/log/output_log.txt
+euralteleportation_env/
+euralteleportation_env
+euralteleportation_env/*
+neuralteleportation_env/
+neuralteleportation/experiments/.DS_Store
+neuralteleportation/experiments/figure.png
+neuralteleportation/experiments/sparse-cap-acc-tmp/images/
+neuralteleportation/experiments/data/
+neuralteleportation/experiments/mobilenetv1_teleport_ZO_temp
+neuralteleportation/experiments/resnet20_teleport_ZO_temp
