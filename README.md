@@ -1,7 +1,7 @@
 # TeleSparseRepo
 
 ## Overview
-**TeleSparseRepo** is a research codebase for exploring *verifiable unlearning* and *privacy-preserving inference* via sparse neural networks. It integrates pruning, teleportation, and zkML benchmarking, with tools and interfaces for reproducible experiments targeting proof generation and activation optimization.
+**TeleSparseRepo** is a research codebase for *privacy-preserving inference* via sparse neural networks. It integrates pruning, teleportation, and zkML benchmarking, with tools and interfaces for reproducible experiments targeting proof generation and activation optimization.
 
 This project supports the paper accepted at **PETS 2025**.
 
